@@ -1,0 +1,12 @@
+hex 索引加载成功: 622 个 key（来源: /Users/ucd/Desktop/md-skill/nodejs/component-service/search_index.json）
+component-service 已启动: http://localhost:3102
+LIB_OUT_DIR: /Users/ucd/Desktop/md-skill/pixso-parse/pix-split/lib-out
+[2026-06-09T02:20:56.419Z] POST /match (description="主按钮大号") 收到请求
+[match_variant] matchVariant 开始：「主按钮大号」
+[match_variant] matchVariant → 描述已含中文（100%），跳过语义提取
+[match_variant] selectComponentSet（选组件集） → 调用 https://api.deepseek.com/v1 (model=deepseek-v4-flash, timeout=60000ms)
+[match_variant] selectComponentSet（选组件集） ✓ 完成，耗时 2439ms
+[match_variant] selectVariant（精选变体） → 调用 https://api.deepseek.com/v1 (model=deepseek-v4-flash, timeout=60000ms)
+[match_variant] selectVariant（精选变体） ✓ 完成，耗时 2894ms
+[match_variant] 规范映射表写入 1 条，当前共 1 条
+[server] POST /match (description="主按钮大号") ✓ 命中：1.按钮 / status=primary, Interaction=default, size=large, disabled=false

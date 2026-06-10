@@ -23,7 +23,7 @@ PORT=3103 LIB_OUT_DIR=/path/to/lib node server.js
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `PORT` | `3103` | 监听端口 |
-| `LIB_OUT_DIR` | `/Users/h30072573/lib` | 共享数据目录，组件库数据（`{source}/component/`）和共享索引（`search_index.json`）都存于此 |
+| `LIB_OUT_DIR` | `~/lib` | 共享数据目录，组件库数据（`{source}/component/`）和共享索引（`search_index.json`）都存于此 |
 
 > `.env` 已预置好上述所有项。本地启动无需额外配置。
 
@@ -34,7 +34,7 @@ PORT=3103 LIB_OUT_DIR=/path/to/lib node server.js
 共享数据目录 `LIB_OUT_DIR` 结构：
 
 ```
-/Users/h30072573/lib/
+~/lib/
 ├── search_index.json          # 共享索引（由本服务生成）
 ├── ict-ui/
 │   └── component/
@@ -146,7 +146,7 @@ PORT=3103 LIB_OUT_DIR=/path/to/lib node server.js
   "entries": 491,
   "sources": [
     { "key": "ict-ui", "label": "ICT UI 组件库", "componentSets": 319, "standaloneComponents": 172 },
-    { "key": "h-design-chart", "label": "H Design 图表库", "skipped": true, "reason": "not found: /Users/h30072573/lib/h-design-chart/component/component_index.json" }
+    { "key": "h-design-chart", "label": "H Design 图表库", "skipped": true, "reason": "not found: ~/lib/h-design-chart/component/component_index.json" }
   ],
   "hex_keys": 491
 }

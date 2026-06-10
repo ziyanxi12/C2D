@@ -200,7 +200,7 @@ rm -rf {LIB_OUT_DIR}/{source}/component
 
 例如：
 ```bash
-rm -rf /Users/h30072573/lib/ict-ui/component
+rm -rf ~/lib/ict-ui/component
 ```
 
 **第 ② 步：拆解新数据**
@@ -249,7 +249,7 @@ curl -s http://localhost:3103/hex/<某个key>
    ```bash
    # 找到进程并重启
    pkill -f "node.*dsl-match-service/server.js"
-   cd /Users/h30072573/nodejs/dsl-match-service
+   cd ~/nodejs/dsl-match-service
    node server.js
    ```
 
@@ -273,7 +273,7 @@ rsync -avz {LIB_OUT_DIR}/{新库目录名}/ 目标机器:{LIB_OUT_DIR}/{新库�
 scp -r {LIB_OUT_DIR}/{新库目录名} 目标机器:{LIB_OUT_DIR}/
 ```
 
-本地/同机部署默认 `LIB_OUT_DIR` 指向 `/Users/h30072573/lib`，第①步的产物已经落在这里，无需额外操作。
+本地/同机部署默认 `LIB_OUT_DIR` 指向 `~/lib`，第①步的产物已经落在这里，无需额外操作。
 
 ---
 
@@ -316,7 +316,7 @@ curl http://localhost:3103/hex/93_55829
 
 # ⑤ 重启 dsl-match-service（手动）
 pkill -f "node.*dsl-match-service/server.js"
-cd /Users/h30072573/nodejs/dsl-match-service
+cd ~/nodejs/dsl-match-service
 node server.js
 ```
 
@@ -326,7 +326,7 @@ node server.js
 
 ```bash
 # ① 删除旧数据
-rm -rf /Users/h30072573/lib/ict-ui/component
+rm -rf ~/lib/ict-ui/component
 
 # ② 拆解新数据
 curl -X POST http://localhost:3103/split \
@@ -341,7 +341,7 @@ curl http://localhost:3103/health
 
 # ⑤ 重启 dsl-match-service（手动）
 pkill -f "node.*dsl-match-service/server.js"
-cd /Users/h30072573/nodejs/dsl-match-service
+cd ~/nodejs/dsl-match-service
 node server.js
 ```
 

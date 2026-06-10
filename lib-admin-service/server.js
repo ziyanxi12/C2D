@@ -3,6 +3,7 @@
 
 const fs                = require('fs');
 const path              = require('path');
+const os                = require('os');
 const express           = require('express');
 const multer            = require('multer');
 const { splitLibrary }   = require('./split_lib');
@@ -22,7 +23,12 @@ const app    = express();
 const PORT   = Number(process.env.PORT) || 3103;
 const upload = multer({ storage: multer.memoryStorage() });
 
-const LIB_OUT_DIR = process.env.LIB_OUT_DIR || '/Users/h30072573/lib';
+function expandTilde(p) {
+  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
+const LIB_OUT_DIR = expandTilde(process.env.LIB_OUT_DIR || path.join(os.homedir(), 'lib'));
 
 app.use(express.json());
 

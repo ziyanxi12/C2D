@@ -146,12 +146,13 @@ POST /convert { dsl }
 | 文件名 | 说明 |
 |---|---|
 | `output.hex` | Pixso 可导入的 hex 文件，写入 `.txt` 扩展名导入 Pixso 即可 |
+| `workflow.json` | 导入 Pixso 的完整执行流程，供客户端或自动化工具按步骤执行。详细规范见 [WORKFLOW.md](../WORKFLOW.md) |
 | `{guid}.svg` | DSL 中 `placeholder.replacement_type = "svg"` 的图层，`note` 字段内容即完整 SVG 文本 |
 | `{guid}.png` | DSL 中 `placeholder.replacement_type = "image"` 的图层，`note` 字段的 base64 图片解码后的二进制 PNG |
 
 **guid 命名规则：** 图层 `id` 字段（格式 `sessionId:localId`）中冒号替换为下划线，例如 `1:14` → `1_14`。
 
-无 placeholder 图层时，zip 仅包含 `output.hex`。
+无 placeholder 图层时，zip 仅包含 `output.hex` 和 `workflow.json`。
 
 ---
 
@@ -200,8 +201,9 @@ unzip output.zip
 
 解压后得到：
 ```
-output.hex     3875 bytes   <!-- pixso binary data -->\n706978736f...
-9999_1.svg      110 bytes   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">...</svg>
-9999_2.png       67 bytes   PNG image data, 1 x 1, 8-bit/color RGB
+output.hex       3875 bytes   <!-- pixso binary data -->\n706978736f...
+workflow.json     512 bytes   导入执行流程（含 import_hex、insert_svg、insert_image 步骤）
+9999_1.svg        110 bytes   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">...</svg>
+9999_2.png         67 bytes   PNG image data, 1 x 1, 8-bit/color RGB
 ```
-内容与 DSL 中对应图层的 `placeholder.note` 完全一致，guid 命名规则（`9999:1` → `9999_1`）也按预期生效。
+hex 与 placeholder 资源内容与 DSL 中对应图层完全一致，workflow.json 结构符合 [WORKFLOW.md](../WORKFLOW.md) 规范。

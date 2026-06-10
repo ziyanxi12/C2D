@@ -4,6 +4,7 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { generateWorkflow, idToGuid } = require('./workflowGenerator');
 
 // 自动加载同目录 .env
 const envFile = path.resolve(__dirname, '.env');
@@ -93,11 +94,6 @@ function extractPlaceholders(dsl) {
   return list;
 }
 
-// id "1:14" → "1_14"（用于文件名）
-function idToGuid(id) {
-  return String(id).replace(/:/g, '_');
-}
-
 // ---------------------------------------------------------------------------
 // 按 path 字段直接拼本地路径，读取所有组件的 hex 内容
 // ---------------------------------------------------------------------------
@@ -125,10 +121,15 @@ async function readAllHex(refs) {
 // ---------------------------------------------------------------------------
 // 将 hex 输出与 svg/png 资源打包成 zip，返回 Buffer
 // ---------------------------------------------------------------------------
-function buildZip(tmpDir, hexContent, placeholders) {
+function buildZip(tmpDir, hexContent, placeholders, includeWorkflow = false) {
   fs.writeFileSync(path.join(tmpDir, 'output.hex'), hexContent, 'utf8');
 
   const files = ['output.hex'];
+  
+  if (includeWorkflow && fs.existsSync(path.join(tmpDir, 'workflow.json'))) {
+    files.push('workflow.json');
+  }
+  
   for (const { id, type } of placeholders) {
     const guid = idToGuid(id);
     const fname = type === 'svg' ? `${guid}.svg` : `${guid}.png`;
@@ -206,8 +207,12 @@ async function convert(dsl) {
     const result = parseWasmResult(raw);
     if (result.error) return result;
 
-    // 6. 打包 zip
-    const zipBuf = buildZip(tmpDir, result.hex, placeholders);
+    // 6. 生成 workflow.json
+    const workflow = generateWorkflow(dsl, placeholders);
+    fs.writeFileSync(path.join(tmpDir, 'workflow.json'), JSON.stringify(workflow, null, 2), 'utf8');
+
+    // 7. 打包 zip（包含 workflow.json）
+    const zipBuf = buildZip(tmpDir, result.hex, placeholders, true);
 
     // 合并 fetch 阶段的 missing 与 WASM 报告的 missing
     const allMissing = [...fetchMissing, ...(result.missing_keys || [])];
@@ -215,7 +220,7 @@ async function convert(dsl) {
     if (allMissing.length > 0) out.missing_keys = [...new Set(allMissing)];
     return out;
   } finally {
-    // 7. 无论成功失败都清理临时目录
+    // 8. 无论成功失败都清理临时目录
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
 }

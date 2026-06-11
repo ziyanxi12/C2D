@@ -19,5 +19,5 @@ yarn-error.log*
 
 harmony_out
 wasm_test_out
-lib
+split_compset/lib
 test_data

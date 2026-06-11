@@ -284,6 +284,12 @@ struct DslOverride {
     std::string value;   // "查看更多"
 };
 
+struct DslPlaceholder {
+    bool        isPlaceholder     = false;
+    std::string replacementType;
+    std::string note;
+};
+
 struct DslLayer {
     std::string id, name, type;
     bool        visible      = true;
@@ -293,6 +299,7 @@ struct DslLayer {
     float       cornerRadius = 0.0f;
     std::vector<DslFill>  fills;
     std::vector<DslLayer> children;
+    DslPlaceholder placeholder;
     // instance 字段
     std::string symbolId, variantKey, componentSetKey;
     std::vector<DslOverride> overrides;
@@ -370,6 +377,12 @@ static DslLayer parseLayer(const JVal &j) {
         if (ts.has("font_style"))  l.textFontStyle  = ts.get("font_style").asStr();
         if (ts.has("font_size"))   l.textFontSize   = ts.get("font_size").asFloat();
         if (ts.has("color"))       l.textColor      = ts.get("color").asStr();
+    }
+    if (j.has("placeholder")) {
+        const JVal &ph = j.get("placeholder");
+        if (ph.has("is_placeholder"))    l.placeholder.isPlaceholder    = ph.get("is_placeholder").asBool();
+        if (ph.has("replacement_type"))  l.placeholder.replacementType   = ph.get("replacement_type").asStr();
+        if (ph.has("note"))              l.placeholder.note              = ph.get("note").asStr();
     }
     return l;
 }
@@ -872,6 +885,19 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         }
         // TODO: text_style.align_h / align_v → TextAlignHorizontal / TextAlignVertical
         // TODO: text_style.letter_spacing / line_height → TextStyleData
+    }
+
+    // placeholder → pluginData（写入 PixsoNode.pluginData 数组）
+    if (layer.placeholder.isPlaceholder) {
+        auto &pdArr = n.set_pluginData(pool, 1);
+        PluginData &pd = pdArr[0];
+        pd.set_pluginID(pool.string("pluginID"));
+        pd.set_key(pool.string("placeholder"));
+        
+        std::string phJson = "{\"is_placeholder\":true,\"replacement_type\":\"" 
+                           + layer.placeholder.replacementType + "\",\"note\":\"" 
+                           + layer.placeholder.note + "\"}";
+        pd.set_value(pool.string(phJson.c_str()));
     }
 
     for (size_t i = 0; i < layer.children.size(); i++)

@@ -1,0 +1,752 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "source": "pixso",
+    "file_id": "test-file-001",
+    "file_name": "测试组件库",
+    "created_at": "2026-06-10T08:00:00Z",
+    "updated_at": "2026-06-10T08:30:00Z"
+  },
+  "pages": [
+    {
+      "id": "0:1",
+      "name": "组件测试页面",
+      "layers": [
+        {
+          "id": "1:1",
+          "name": "主容器",
+          "type": "frame",
+          "visible": true,
+          "opacity": 1,
+          "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 800, "height": 1200 },
+          "fills": [
+            {
+              "type": "solid",
+              "visible": true,
+              "opacity": 1,
+              "color": "#F5F5F5FF"
+            }
+          ],
+          "auto_layout": {
+            "direction": "vertical",
+            "gap": 24,
+            "counter_gap": 0,
+            "padding": [40, 40, 40, 40],
+            "align_items": "stretch",
+            "justify_content": "min",
+            "wrap": false
+          },
+          "children": [
+            {
+              "id": "2:1",
+              "name": "页面标题",
+              "type": "text",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 40, "y": 40, "width": 720, "height": 48 },
+              "text_content": "组件测试",
+              "text_style": {
+                "font_family": "HarmonyOS Sans",
+                "font_style": "Bold",
+                "font_size": 32,
+                "color": "#1A1A1AFF",
+                "letter_spacing": 0,
+                "line_height": "auto",
+                "align_h": "left",
+                "align_v": "top"
+              }
+            },
+            {
+              "id": "3:1",
+              "name": "按钮测试区域",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 40, "y": 112, "width": 720, "height": 280 },
+              "fills": [
+                {
+                  "type": "solid",
+                  "visible": true,
+                  "opacity": 1,
+                  "color": "#FFFFFFFF"
+                }
+              ],
+              "corner_radius": 12,
+              "auto_layout": {
+                "direction": "vertical",
+                "gap": 20,
+                "counter_gap": 0,
+                "padding": [24, 24, 24, 24],
+                "align_items": "stretch",
+                "justify_content": "min",
+                "wrap": false
+              },
+              "children": [
+                {
+                  "id": "3:2",
+                  "name": "区域标题-按钮",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 136, "width": 672, "height": 24 },
+                  "text_content": "按钮组件",
+                  "text_style": {
+                    "font_family": "HarmonyOS Sans",
+                    "font_style": "Medium",
+                    "font_size": 18,
+                    "color": "#333333FF",
+                    "letter_spacing": 0,
+                    "line_height": "auto",
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "3:3",
+                  "name": "按钮组-状态",
+                  "type": "frame",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 180, "width": 672, "height": 40 },
+                  "auto_layout": {
+                    "direction": "horizontal",
+                    "gap": 12,
+                    "counter_gap": 0,
+                    "padding": [0, 0, 0, 0],
+                    "align_items": "center",
+                    "justify_content": "min",
+                    "wrap": false
+                  },
+                  "children": [
+                    {
+                      "id": "3:4",
+                      "name": "主按钮",
+                      "type": "instance",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 180, "width": 120, "height": 40 },
+                      "instance": {
+                        "symbol_id": "100:1",
+                        "variant_key": "abc123def456ghi789jkl012mno345pqr678stu901",
+                        "component_set_key": "xyz987wvu654tsr321qpo098nml765kji432hgf109",
+                        "component_set_resolved": true,
+                        "path": "h-design-button/component/btn_primary.txt",
+                        "variant_props": {
+                          "类型": "Primary",
+                          "状态": "Normal",
+                          "尺寸": "Medium"
+                        },
+                        "overrides": []
+                      }
+                    },
+                    {
+                      "id": "3:5",
+                      "name": "次按钮",
+                      "type": "instance",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 196, "y": 180, "width": 120, "height": 40 },
+                      "instance": {
+                        "symbol_id": "100:2",
+                        "variant_key": "def456ghi789jkl012mno345pqr678stu901abc123",
+                        "component_set_key": "xyz987wvu654tsr321qpo098nml765kji432hgf109",
+                        "component_set_resolved": true,
+                        "path": "h-design-button/component/btn_secondary.txt",
+                        "variant_props": {
+                          "类型": "Secondary",
+                          "状态": "Normal",
+                          "尺寸": "Medium"
+                        },
+                        "overrides": []
+                      }
+                    },
+                    {
+                      "id": "3:6",
+                      "name": "禁用按钮",
+                      "type": "instance",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 328, "y": 180, "width": 120, "height": 40 },
+                      "instance": {
+                        "symbol_id": "100:3",
+                        "variant_key": "ghi789jkl012mno345pqr678stu901abc123def456",
+                        "component_set_key": "xyz987wvu654tsr321qpo098nml765kji432hgf109",
+                        "component_set_resolved": true,
+                        "path": "h-design-button/component/btn_disabled.txt",
+                        "variant_props": {
+                          "类型": "Primary",
+                          "状态": "Disabled",
+                          "尺寸": "Medium"
+                        },
+                        "overrides": []
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "3:7",
+                  "name": "按钮组-尺寸",
+                  "type": "frame",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 240, "width": 672, "height": 80 },
+                  "auto_layout": {
+                    "direction": "horizontal",
+                    "gap": 12,
+                    "counter_gap": 0,
+                    "padding": [0, 0, 0, 0],
+                    "align_items": "center",
+                    "justify_content": "min",
+                    "wrap": false
+                  },
+                  "children": [
+                    {
+                      "id": "3:8",
+                      "name": "大尺寸按钮",
+                      "type": "instance",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 240, "width": 160, "height": 48 },
+                      "instance": {
+                        "symbol_id": "100:4",
+                        "variant_key": "jkl012mno345pqr678stu901abc123def456ghi789",
+                        "component_set_key": "xyz987wvu654tsr321qpo098nml765kji432hgf109",
+                        "component_set_resolved": true,
+                        "path": "h-design-button/component/btn_large.txt",
+                        "variant_props": {
+                          "类型": "Primary",
+                          "状态": "Normal",
+                          "尺寸": "Large"
+                        },
+                        "overrides": []
+                      }
+                    },
+                    {
+                      "id": "3:9",
+                      "name": "中尺寸按钮",
+                      "type": "instance",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 236, "y": 244, "width": 120, "height": 40 },
+                      "instance": {
+                        "symbol_id": "100:5",
+                        "variant_key": "mno345pqr678stu901abc123def456ghi789jkl012",
+                        "component_set_key": "xyz987wvu654tsr321qpo098nml765kji432hgf109",
+                        "component_set_resolved": true,
+                        "path": "h-design-button/component/btn_medium.txt",
+                        "variant_props": {
+                          "类型": "Primary",
+                          "状态": "Normal",
+                          "尺寸": "Medium"
+                        },
+                        "overrides": []
+                      }
+                    },
+                    {
+                      "id": "3:10",
+                      "name": "小尺寸按钮",
+                      "type": "instance",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 368, "y": 248, "width": 80, "height": 32 },
+                      "instance": {
+                        "symbol_id": "100:6",
+                        "variant_key": "pqr678stu901abc123def456ghi789jkl012mno345",
+                        "component_set_key": "xyz987wvu654tsr321qpo098nml765kji432hgf109",
+                        "component_set_resolved": true,
+                        "path": "h-design-button/component/btn_small.txt",
+                        "variant_props": {
+                          "类型": "Primary",
+                          "状态": "Normal",
+                          "尺寸": "Small"
+                        },
+                        "overrides": []
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "4:1",
+              "name": "输入框测试区域",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 40, "y": 416, "width": 720, "height": 340 },
+              "fills": [
+                {
+                  "type": "solid",
+                  "visible": true,
+                  "opacity": 1,
+                  "color": "#FFFFFFFF"
+                }
+              ],
+              "corner_radius": 12,
+              "auto_layout": {
+                "direction": "vertical",
+                "gap": 16,
+                "counter_gap": 0,
+                "padding": [24, 24, 24, 24],
+                "align_items": "stretch",
+                "justify_content": "min",
+                "wrap": false
+              },
+              "children": [
+                {
+                  "id": "4:2",
+                  "name": "区域标题-输入框",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 440, "width": 672, "height": 24 },
+                  "text_content": "输入框组件",
+                  "text_style": {
+                    "font_family": "HarmonyOS Sans",
+                    "font_style": "Medium",
+                    "font_size": 18,
+                    "color": "#333333FF",
+                    "letter_spacing": 0,
+                    "line_height": "auto",
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "4:3",
+                  "name": "用户名输入框容器",
+                  "type": "frame",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 480, "width": 672, "height": 72 },
+                  "auto_layout": {
+                    "direction": "vertical",
+                    "gap": 8,
+                    "counter_gap": 0,
+                    "padding": [0, 0, 0, 0],
+                    "align_items": "stretch",
+                    "justify_content": "min",
+                    "wrap": false
+                  },
+                  "children": [
+                    {
+                      "id": "4:4",
+                      "name": "用户名标签",
+                      "type": "text",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 480, "width": 672, "height": 20 },
+                      "text_content": "用户名",
+                      "text_style": {
+                        "font_family": "HarmonyOS Sans",
+                        "font_style": "Regular",
+                        "font_size": 14,
+                        "color": "#666666FF",
+                        "letter_spacing": 0,
+                        "line_height": "auto",
+                        "align_h": "left",
+                        "align_v": "center"
+                      }
+                    },
+                    {
+                      "id": "4:5",
+                      "name": "用户名输入框",
+                      "type": "frame",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 508, "width": 672, "height": 44 },
+                      "fills": [
+                        {
+                          "type": "solid",
+                          "visible": true,
+                          "opacity": 1,
+                          "color": "#F8F8F8FF"
+                        }
+                      ],
+                      "strokes": [
+                        {
+                          "type": "solid",
+                          "visible": true,
+                          "opacity": 1,
+                          "color": "#D9D9D9FF"
+                        }
+                      ],
+                      "corner_radius": 8,
+                      "auto_layout": {
+                        "direction": "horizontal",
+                        "gap": 8,
+                        "counter_gap": 0,
+                        "padding": [12, 16, 12, 16],
+                        "align_items": "center",
+                        "justify_content": "min",
+                        "wrap": false
+                      },
+                      "children": [
+                        {
+                          "id": "4:6",
+                          "name": "用户名占位符",
+                          "type": "text",
+                          "visible": true,
+                          "opacity": 1,
+                          "blend_mode": "normal",
+                          "box": { "x": 80, "y": 520, "width": 608, "height": 20 },
+                          "text_content": "请输入用户名",
+                          "text_style": {
+                            "font_family": "HarmonyOS Sans",
+                            "font_style": "Regular",
+                            "font_size": 14,
+                            "color": "#B3B3B3FF",
+                            "letter_spacing": 0,
+                            "line_height": "auto",
+                            "align_h": "left",
+                            "align_v": "center"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "4:7",
+                  "name": "密码输入框容器",
+                  "type": "frame",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 568, "width": 672, "height": 72 },
+                  "auto_layout": {
+                    "direction": "vertical",
+                    "gap": 8,
+                    "counter_gap": 0,
+                    "padding": [0, 0, 0, 0],
+                    "align_items": "stretch",
+                    "justify_content": "min",
+                    "wrap": false
+                  },
+                  "children": [
+                    {
+                      "id": "4:8",
+                      "name": "密码标签",
+                      "type": "text",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 568, "width": 672, "height": 20 },
+                      "text_content": "密码",
+                      "text_style": {
+                        "font_family": "HarmonyOS Sans",
+                        "font_style": "Regular",
+                        "font_size": 14,
+                        "color": "#666666FF",
+                        "letter_spacing": 0,
+                        "line_height": "auto",
+                        "align_h": "left",
+                        "align_v": "center"
+                      }
+                    },
+                    {
+                      "id": "4:9",
+                      "name": "密码输入框",
+                      "type": "frame",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 596, "width": 672, "height": 44 },
+                      "fills": [
+                        {
+                          "type": "solid",
+                          "visible": true,
+                          "opacity": 1,
+                          "color": "#F8F8F8FF"
+                        }
+                      ],
+                      "strokes": [
+                        {
+                          "type": "solid",
+                          "visible": true,
+                          "opacity": 1,
+                          "color": "#D9D9D9FF"
+                        }
+                      ],
+                      "corner_radius": 8,
+                      "auto_layout": {
+                        "direction": "horizontal",
+                        "gap": 8,
+                        "counter_gap": 0,
+                        "padding": [12, 16, 12, 16],
+                        "align_items": "center",
+                        "justify_content": "min",
+                        "wrap": false
+                      },
+                      "children": [
+                        {
+                          "id": "4:10",
+                          "name": "密码占位符",
+                          "type": "text",
+                          "visible": true,
+                          "opacity": 1,
+                          "blend_mode": "normal",
+                          "box": { "x": 80, "y": 608, "width": 608, "height": 20 },
+                          "text_content": "请输入密码",
+                          "text_style": {
+                            "font_family": "HarmonyOS Sans",
+                            "font_style": "Regular",
+                            "font_size": 14,
+                            "color": "#B3B3B3FF",
+                            "letter_spacing": 0,
+                            "line_height": "auto",
+                            "align_h": "left",
+                            "align_v": "center"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "4:11",
+                  "name": "邮箱输入框容器",
+                  "type": "frame",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 656, "width": 672, "height": 72 },
+                  "auto_layout": {
+                    "direction": "vertical",
+                    "gap": 8,
+                    "counter_gap": 0,
+                    "padding": [0, 0, 0, 0],
+                    "align_items": "stretch",
+                    "justify_content": "min",
+                    "wrap": false
+                  },
+                  "children": [
+                    {
+                      "id": "4:12",
+                      "name": "邮箱标签",
+                      "type": "text",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 656, "width": 672, "height": 20 },
+                      "text_content": "邮箱",
+                      "text_style": {
+                        "font_family": "HarmonyOS Sans",
+                        "font_style": "Regular",
+                        "font_size": 14,
+                        "color": "#666666FF",
+                        "letter_spacing": 0,
+                        "line_height": "auto",
+                        "align_h": "left",
+                        "align_v": "center"
+                      }
+                    },
+                    {
+                      "id": "4:13",
+                      "name": "邮箱输入框",
+                      "type": "frame",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 684, "width": 672, "height": 44 },
+                      "fills": [
+                        {
+                          "type": "solid",
+                          "visible": true,
+                          "opacity": 1,
+                          "color": "#F8F8F8FF"
+                        }
+                      ],
+                      "strokes": [
+                        {
+                          "type": "solid",
+                          "visible": true,
+                          "opacity": 1,
+                          "color": "#D9D9D9FF"
+                        }
+                      ],
+                      "corner_radius": 8,
+                      "auto_layout": {
+                        "direction": "horizontal",
+                        "gap": 8,
+                        "counter_gap": 0,
+                        "padding": [12, 16, 12, 16],
+                        "align_items": "center",
+                        "justify_content": "min",
+                        "wrap": false
+                      },
+                      "children": [
+                        {
+                          "id": "4:14",
+                          "name": "邮箱占位符",
+                          "type": "text",
+                          "visible": true,
+                          "opacity": 1,
+                          "blend_mode": "normal",
+                          "box": { "x": 80, "y": 696, "width": 608, "height": 20 },
+                          "text_content": "请输入邮箱地址",
+                          "text_style": {
+                            "font_family": "HarmonyOS Sans",
+                            "font_style": "Regular",
+                            "font_size": 14,
+                            "color": "#B3B3B3FF",
+                            "letter_spacing": 0,
+                            "line_height": "auto",
+                            "align_h": "left",
+                            "align_v": "center"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "5:1",
+              "name": "Icon 测试区域",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 40, "y": 780, "width": 720, "height": 200 },
+              "fills": [
+                {
+                  "type": "solid",
+                  "visible": true,
+                  "opacity": 1,
+                  "color": "#FFFFFFFF"
+                }
+              ],
+              "corner_radius": 12,
+              "auto_layout": {
+                "direction": "vertical",
+                "gap": 20,
+                "counter_gap": 0,
+                "padding": [24, 24, 24, 24],
+                "align_items": "stretch",
+                "justify_content": "min",
+                "wrap": false
+              },
+              "children": [
+                {
+                  "id": "5:2",
+                  "name": "区域标题-Icons",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 804, "width": 672, "height": 24 },
+                  "text_content": "SVG Icons",
+                  "text_style": {
+                    "font_family": "HarmonyOS Sans",
+                    "font_style": "Medium",
+                    "font_size": 18,
+                    "color": "#333333FF",
+                    "letter_spacing": 0,
+                    "line_height": "auto",
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "5:3",
+                  "name": "Icons 容器",
+                  "type": "frame",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 64, "y": 848, "width": 672, "height": 108 },
+                  "auto_layout": {
+                    "direction": "horizontal",
+                    "gap": 24,
+                    "counter_gap": 0,
+                    "padding": [0, 0, 0, 0],
+                    "align_items": "center",
+                    "justify_content": "min",
+                    "wrap": false
+                  },
+                  "children": [
+                    {
+                      "id": "5:4",
+                      "name": "搜索图标",
+                      "type": "ellipse",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 64, "y": 892, "width": 20, "height": 20 },
+                      "placeholder": {
+                        "is_placeholder": true,
+                        "replacement_type": "svg",
+                        "note": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" fill=\"none\"><circle cx=\"9\" cy=\"9\" r=\"7\" stroke=\"currentColor\" stroke-width=\"2\"/><line x1=\"14\" y1=\"14\" x2=\"18\" y2=\"18\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
+                      }
+                    },
+                    {
+                      "id": "5:5",
+                      "name": "用户图标",
+                      "type": "ellipse",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 108, "y": 892, "width": 20, "height": 20 },
+                      "placeholder": {
+                        "is_placeholder": true,
+                        "replacement_type": "svg",
+                        "note": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" fill=\"none\"><circle cx=\"10\" cy=\"7\" r=\"4\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"M3 18c0-3.5 3-6 7-6s7 2.5 7 6\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
+                      }
+                    },
+                    {
+                      "id": "5:6",
+                      "name": "设置图标",
+                      "type": "ellipse",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 152, "y": 892, "width": 20, "height": 20 },
+                      "placeholder": {
+                        "is_placeholder": true,
+                        "replacement_type": "svg",
+                        "note": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" fill=\"none\"><circle cx=\"10\" cy=\"10\" r=\"3\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"M10 1v3M10 16v3M1 10h3M16 10h3M3.5 3.5l2 2M14.5 14.5l2 2M3.5 16.5l2-2M14.5 5.5l2-2\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
+                      }
+                    },
+                    {
+                      "id": "5:7",
+                      "name": "关闭图标",
+                      "type": "ellipse",
+                      "visible": true,
+                      "opacity": 1,
+                      "blend_mode": "normal",
+                      "box": { "x": 196, "y": 892, "width": 20, "height": 20 },
+                      "placeholder": {
+                        "is_placeholder": true,
+                        "replacement_type": "svg",
+                        "note": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" fill=\"none\"><line x1=\"4\" y1=\"4\" x2=\"16\" y2=\"16\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><line x1=\"16\" y1=\"4\" x2=\"4\" y2=\"16\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

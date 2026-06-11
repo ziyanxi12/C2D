@@ -16,3 +16,8 @@ yarn-error.log*
 
 # Backup files
 *.backup.json
+
+harmony_out
+wasm_test_out
+lib
+test_data

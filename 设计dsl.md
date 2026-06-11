@@ -67,11 +67,11 @@
 | 字段 | 类型 | 必选 | 说明 |
 |---|---|---|---|
 | `fills` | Fill[] | 否 | 填充列表 |
-| `strokes` | Stroke[] | 否 | 描边列表 |
-| `effects` | Effect[] | 否 | 效果列表（阴影、模糊等）|
+| `strokes` | Stroke[] | 否 | 描边列表（**未实现**）|
+| `effects` | Effect[] | 否 | 效果列表（阴影、模糊等）（**未实现**）|
 | `corner_radius` | number | 否 | 圆角半径（统一值）|
-| `corner_radii` | number[4] | 否 | 四角独立圆角 `[TL, TR, BR, BL]`，与 `corner_radius` 互斥 |
-| `auto_layout` | AutoLayout | 否 | 自动布局（仅 `frame` 类型，且开启了 Auto Layout）|
+| `corner_radii` | number[4] | 否 | 四角独立圆角 `[TL, TR, BR, BL]`，与 `corner_radius` 互斥（**未实现**）|
+| `auto_layout` | AutoLayout | 否 | 自动布局（仅 `frame` 类型，且开启了 Auto Layout）（**未实现**）|
 | `text_content` | string | 否 | 文本内容（仅 `text` 类型）|
 | `text_style` | TextStyle | 否 | 文本样式（仅 `text` 类型）|
 | `children` | Layer[] | 否 | 子图层列表（仅 `frame / group / boolean` 类型）|
@@ -95,7 +95,7 @@
 | `symbol_id` | string | 是 | 变体 SYMBOL 的 GUID，格式 `"sessionID:localID"`。转换时与组件集 hex 中查到的 GUID 做校验，不一致则以库为准并更新 |
 | `variant_key` | string | 是 | 变体的 `componentKey`（该 SYMBOL 的全局唯一 hash）|
 | `component_set_key` | string | 是 | 所属组件集的 `componentKey`；若该组件无父组件集，则与 `variant_key` 相同 |
-| `component_set_resolved` | boolean | 是 | 组件集是否可在已加载的库中被解析。`false` 表示 key 存在但库不可用 |
+| `component_set_resolved` | boolean | 是 | 组件集是否可在已加载的库中被解析。`false` 表示 key 存在但库不可用（**未实现**）|
 | `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"h-design-chart/component/93_55829.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
 | `variant_props` | object | 否 | 变体属性键值对，如 `{"状态": "Pressed", "尺寸": "Medium"}` |
 | `overrides` | InstanceOverride[] | 否 | 实例级属性覆写列表 |
@@ -156,10 +156,10 @@
 | `font_style` | string | 字重/样式，如 `"Regular"` / `"Bold"` |
 | `font_size` | number | 字号（px）|
 | `color` | string | 文字颜色（HEX + Alpha）|
-| `letter_spacing` | number | 字间距 |
-| `line_height` | number \| string | 行高（px 或 `"auto"`）|
-| `align_h` | string | 水平对齐：`"left"` / `"center"` / `"right"` / `"justified"` |
-| `align_v` | string | 垂直对齐：`"top"` / `"center"` / `"bottom"` |
+| `letter_spacing` | number | 字间距（**未实现**）|
+| `line_height` | number \| string | 行高（px 或 `"auto"`）（**未实现**）|
+| `align_h` | string | 水平对齐：`"left"` / `"center"` / `"right"` / `"justified"`（**未实现**）|
+| `align_v` | string | 垂直对齐：`"top"` / `"center"` / `"bottom"`（**未实现**）|
 
 ---
 

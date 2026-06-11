@@ -46,7 +46,7 @@ worker 启动时会 `require('./core')` 并校验以下导出，缺失任何一�
 ```
 
 zip 内容：
-- `output.hex` — 主 hex 文件
+- `output.txt` — 主 hex 文件
 - `<id>.svg` — 图标 SVG（来自节点 placeholder）
 - `<id>.png` — 图片资源（来自节点 placeholder）
 

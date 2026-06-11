@@ -48,7 +48,7 @@ POST /convert { dsl }
   │      dsl.json         —— DSL 输入
   ├─ 4. 调用 WASM：dslToHex(dslPath, tmpDir) → hex 字符串
   │      （转换失败则直接返回 { error }，不再继续打包）
-  ├─ 5. 将 hex 写为 output.hex，与 svg/png 文件一起打包为 output.zip
+  ├─ 5. 将 hex 写为 output.txt，与 svg/png 文件一起打包为 output.zip
   ├─ 6. 清理临时目录
   └─ 返回 { zip: base64, missing_keys? }
 ```
@@ -145,14 +145,13 @@ POST /convert { dsl }
 
 | 文件名 | 说明 |
 |---|---|
-| `output.hex` | Pixso 可导入的 hex 文件，写入 `.txt` 扩展名导入 Pixso 即可 |
-| `workflow.json` | 导入 Pixso 的完整执行流程，供客户端或自动化工具按步骤执行。详细规范见 [WORKFLOW.md](../WORKFLOW.md) |
+| `output.txt` | Pixso 可导入的 hex 文件 |
 | `{guid}.svg` | DSL 中 `placeholder.replacement_type = "svg"` 的图层，`note` 字段内容即完整 SVG 文本 |
 | `{guid}.png` | DSL 中 `placeholder.replacement_type = "image"` 的图层，`note` 字段的 base64 图片解码后的二进制 PNG |
 
 **guid 命名规则：** 图层 `id` 字段（格式 `sessionId:localId`）中冒号替换为下划线，例如 `1:14` → `1_14`。
 
-无 placeholder 图层时，zip 仅包含 `output.hex` 和 `workflow.json`。
+无 placeholder 图层时，zip 仅包含 `output.txt`。
 
 ---
 
@@ -189,7 +188,7 @@ curl -s -X POST http://localhost:3101/convert \
   | base64 -d > output.zip
 
 unzip output.zip
-# 得到 output.hex（及 placeholder 对应的 svg/png 文件）
+# 得到 output.txt（及 placeholder 对应的 svg/png 文件）
 ```
 
 **实测验证**（对一个含 svg 占位符与 image 占位符图层的 DSL 发起转换）：
@@ -201,9 +200,8 @@ unzip output.zip
 
 解压后得到：
 ```
-output.hex       3875 bytes   <!-- pixso binary data -->\n706978736f...
-workflow.json     512 bytes   导入执行流程（含 import_hex、insert_svg、insert_image 步骤）
+output.txt       3875 bytes   <!-- pixso binary data -->\n706978736f...
 9999_1.svg        110 bytes   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">...</svg>
 9999_2.png         67 bytes   PNG image data, 1 x 1, 8-bit/color RGB
 ```
-hex 与 placeholder 资源内容与 DSL 中对应图层完全一致，workflow.json 结构符合 [WORKFLOW.md](../WORKFLOW.md) 规范。
+hex 与 placeholder 资源内容与 DSL 中对应图层完全一致。

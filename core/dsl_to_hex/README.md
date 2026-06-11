@@ -106,6 +106,8 @@ DSL 格式定义见项目根目录 `../../设计dsl.md`。关键字段：
 | `type: "instance"` | 声明为组件实例节点 |
 | `instance.symbol_id` | 变体 SYMBOL 的 GUID（`sessionID:localID`）|
 | `instance.component_set_key` | 组件集的 componentKey（用于定位 hex 文件）|
+| `instance.path` | 组件集 hex 文件相对路径（拼接 `HEX_LIB_DIR` 直接读取本地文件）|
+| `placeholder` | 占位符元信息，写入 PixsoNode.pluginData 数组 |
 
 ---
 
@@ -133,3 +135,9 @@ PixsoMsg 构建
 - `size` 优先使用 SYMBOL 自身尺寸，DSL box 仅兜底
 - `derivedSymbolData` 每个槽位填入完整 `guidPath`（从 SYMBOL 根到后代节点的 GUID 链），Pixso 靠此定位嵌套实例
 - `symbolData.symbolID` 直接赋值 DSL 的 `symbol_id` GUID
+
+**placeholder → pluginData 转换**：
+- 当图层包含 `placeholder` 字段且 `is_placeholder = true` 时，写入 PixsoNode.pluginData 数组
+- pluginData[0].pluginID = `"pluginID"`
+- pluginData[0].key = `"placeholder"`
+- pluginData[0].value = JSON 字符串 `{"is_placeholder":true,"replacement_type":"...","note":"..."}`

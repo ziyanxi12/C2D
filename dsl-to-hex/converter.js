@@ -16,7 +16,7 @@ if (fs.existsSync(envFile)) {
 
 const logger = createLogger({
   name: 'dsl-to-hex',
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL || 'debug',
   logDir: process.env.LOG_DIR
 });
 
@@ -110,6 +110,8 @@ async function readAllHex(refs) {
   const hexMap      = {};
   const missingKeys = [];
 
+  logger.debug('开始读取 hex 文件', { total: refs.length });
+
   for (const { key, path: relPath } of refs) {
     if (!relPath) {
       missingKeys.push(key);
@@ -124,6 +126,8 @@ async function readAllHex(refs) {
       logger.warn('组件 hex 读取失败', { filePath, error: err.message, stack: err.stack });
     }
   }
+
+  logger.debug('读取 hex 文件完成', { success: Object.keys(hexMap).length, missing: missingKeys.length });
   return { hexMap, missingKeys };
 }
 
@@ -146,7 +150,9 @@ function buildZip(tmpDir, hexContent, placeholders) {
   if (r.status !== 0) {
     throw new Error(`zip 打包失败: ${r.stderr?.toString().trim()}`);
   }
-  return fs.readFileSync(zipPath);
+
+  logger.debug('打包 zip 完成', { filesCount: files.length, files });
+  return { zipBuf: fs.readFileSync(zipPath), filesCount: files.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -173,11 +179,15 @@ function parseWasmResult(raw) {
 // 主转换函数
 // ---------------------------------------------------------------------------
 async function convert(dsl) {
+  logger.info('开始转换', { pages: dsl.pages?.length || 0 });
+
   // 1. 提取所有 { component_set_key, path } 引用
   const refs = extractHexRefs(dsl);
+  logger.debug('提取组件引用完成', { refsCount: refs.length, keys: refs.map(r => r.key) });
 
   // 2. 按 path 拼本地路径，直接读取 hex 内容
   const { hexMap, missingKeys: fetchMissing } = await readAllHex(refs);
+  logger.debug('读取 hex 文件完成', { successCount: Object.keys(hexMap).length, missingCount: fetchMissing.length });
 
   // 3. 写临时目录
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pix-'));
@@ -186,18 +196,27 @@ async function convert(dsl) {
     for (const [key, content] of Object.entries(hexMap)) {
       fs.writeFileSync(path.join(tmpDir, `${key}.txt`), content, 'utf8');
     }
+    if (Object.keys(hexMap).length > 0) {
+      logger.debug('写入 hex 文件完成', { count: Object.keys(hexMap).length });
+    }
 
     // placeholder svg/image 文件：{tmpDir}/{guid}.svg 或 {guid}.png
     const placeholders = extractPlaceholders(dsl);
+    let svgCount = 0, pngCount = 0;
     for (const { id, type, note } of placeholders) {
       const guid = idToGuid(id);
       if (type === 'svg') {
         fs.writeFileSync(path.join(tmpDir, `${guid}.svg`), note, 'utf8');
+        svgCount++;
       } else {
         // base64 → binary
         const b64 = note.replace(/^data:image\/[^;]+;base64,/, '');
         fs.writeFileSync(path.join(tmpDir, `${guid}.png`), Buffer.from(b64, 'base64'));
+        pngCount++;
       }
+    }
+    if (placeholders.length > 0) {
+      logger.debug('写入 placeholder 文件完成', { svg: svgCount, png: pngCount, total: placeholders.length });
     }
 
     // DSL JSON 临时文件
@@ -205,20 +224,27 @@ async function convert(dsl) {
     fs.writeFileSync(dslPath, JSON.stringify(dsl), 'utf8');
 
     // 4. 调用 WASM（同步，阻塞事件循环，单线程自然串行）
+    logger.debug('调用 WASM 转换');
     const mod = await getWasm();
     const raw = mod.dslToHex(dslPath, tmpDir);
+    logger.debug('WASM 转换完成', { resultType: raw.startsWith('{"error"') ? 'error' : raw.startsWith('{"hex"') ? 'hex_with_missing' : 'hex' });
 
     // 5. 解析结果
     const result = parseWasmResult(raw);
-    if (result.error) return result;
+    if (result.error) {
+      logger.error('WASM 转换失败', { error: result.error });
+      return result;
+    }
 
     // 6. 打包 zip
-    const zipBuf = buildZip(tmpDir, result.hex, placeholders);
+    const { zipBuf, filesCount } = buildZip(tmpDir, result.hex, placeholders);
 
     // 合并 fetch 阶段的 missing 与 WASM 报告的 missing
     const allMissing = [...fetchMissing, ...(result.missing_keys || [])];
     const out = { zip: zipBuf.toString('base64') };
     if (allMissing.length > 0) out.missing_keys = [...new Set(allMissing)];
+
+    logger.info('转换完成', { zipFiles: filesCount, hexFiles: Object.keys(hexMap).length, svgFiles: svgCount, pngFiles: pngCount, missingKeys: allMissing.length });
     return out;
   } finally {
     // 8. 无论成功失败都清理临时目录

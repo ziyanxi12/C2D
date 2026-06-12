@@ -424,6 +424,33 @@
                   ]
                 },
                 {
+                  "id": "4:99",
+                  "name": "独立圆角测试矩形",
+                  "type": "rectangle",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 40, "y": 420, "width": 200, "height": 60 },
+                  "fills": [
+                    {
+                      "type": "solid",
+                      "visible": true,
+                      "opacity": 1,
+                      "color": "#3478F6FF"
+                    }
+                  ],
+                  "strokes": [
+                    {
+                      "type": "solid",
+                      "visible": true,
+                      "opacity": 1,
+                      "color": "#1A5FBFFF"
+                    }
+                  ],
+                  "stroke_width": 2,
+                  "corner_radii": [0, 12, 12, 0]
+                },
+                {
                   "id": "4:7",
                   "name": "密码输入框容器",
                   "type": "frame",

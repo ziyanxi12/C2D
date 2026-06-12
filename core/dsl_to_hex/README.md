@@ -138,6 +138,7 @@ PixsoMsg 构建
 
 **placeholder → pluginData 转换**：
 - 当图层包含 `placeholder` 字段且 `is_placeholder = true` 时，写入 PixsoNode.pluginData 数组
-- pluginData[0].pluginID = `"pluginID"`
-- pluginData[0].key = `"placeholder"`
-- pluginData[0].value = JSON 字符串 `{"is_placeholder":true,"replacement_type":"...","note":"..."}`
+- pluginData[0].pluginID = `"pix-dsl"`
+- pluginData[0].key = `"placeholder_meta"`
+- pluginData[0].value = JSON 字符串 `{"is_placeholder":true,"replacement_type":"...","note":"{guid}.svg/png"}`
+- note 字段为 zip 包中的资源文件名（guid = 图层 id 中冒号换下划线，如 `"5:4"` → `"5_4"`）

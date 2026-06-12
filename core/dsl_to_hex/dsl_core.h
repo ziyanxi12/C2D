@@ -890,16 +890,21 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
 
     // PlaceholderMeta → pluginData（所有图层类型均处理）
     if (layer.placeholderEnabled) {
+        // guid = id 中冒号换下划线（与 converter.js idToGuid 一致）
+        std::string guid = layer.id;
+        for (char &c : guid) if (c == ':') c = '_';
+        
+        // note = 文件名（svg/png 文件在 zip 包中）
+        std::string noteFile = guid;
+        noteFile += (layer.placeholderType == "svg") ? ".svg" : ".png";
+        
         // 构造 value JSON：{"is_placeholder":true,"replacement_type":"...","note":"..."}
         std::string val = "{\"is_placeholder\":true,\"replacement_type\":\"";
         val += layer.placeholderType;
-        val += "\"";
-        if (!layer.placeholderNote.empty()) {
-            val += ",\"note\":\"";
-            val += layer.placeholderNote;
-            val += "\"";
-        }
-        val += "}";
+        val += "\",\"note\":\"";
+        val += noteFile;
+        val += "\"}";
+        
         auto &pd = n.set_pluginData(pool, 1);
         pd[0].set_pluginID(pool.string("pix-dsl"));
         pd[0].set_key(pool.string("placeholder_meta"));

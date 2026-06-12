@@ -305,9 +305,10 @@ Fill 和 Stroke 共享相同的字段结构。
 
 **pluginData 写入规则**：
 - 当图层包含 `placeholder` 字段时，解析器会将其写入 PixsoNode 的 pluginData 数组
-- pluginID：`"pluginID"`
-- key：`"placeholder"`
+- pluginID：`"pix-dsl"`
+- key：`"placeholder_meta"`
 - value：JSON 字符串格式，包含上述三个字段
+- `note` 字段在输出 hex 中为 zip 包内的资源文件名（格式 `{guid}.svg` 或 `{guid}.png`，guid = 图层 id 冒号换下划线）
 
 **示例**：
 ```json

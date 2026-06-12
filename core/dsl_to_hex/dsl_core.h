@@ -278,6 +278,13 @@ struct DslFill {
     bool        visible = true;
 };
 
+struct DslStroke {
+    std::string type    = "solid";
+    std::string color   = "#000000FF";
+    float       opacity = 1.0f;
+    bool        visible = true;
+};
+
 struct DslOverride {
     std::string nodeId;  // "320:12075"
     std::string field;   // "text_content"
@@ -288,6 +295,7 @@ struct DslAutoLayout {
     bool        enabled       = false;
     std::string direction     = "vertical"; // "horizontal" | "vertical"
     float       gap           = 0.0f;
+    float       counterGap    = 0.0f;      // 交叉轴间距（wrap模式下）
     float       padTop        = 0.0f;
     float       padRight      = 0.0f;
     float       padBottom     = 0.0f;
@@ -304,11 +312,20 @@ struct DslLayer {
     std::string blendMode    = "normal";
     DslBox      box;
     float       cornerRadius = 0.0f;
+    // 独立圆角字段（顺时针：TL, TR, BR, BL）
+    float       cornerRadiusTL = 0.0f;  // topLeft
+    float       cornerRadiusTR = 0.0f;  // topRight
+    float       cornerRadiusBR = 0.0f;  // bottomRight
+    float       cornerRadiusBL = 0.0f;  // bottomLeft
+    bool        cornerRadiiIndependent = false;
     std::vector<DslFill>  fills;
+    std::vector<DslStroke> strokes;  // 描边列表
+    float       strokeWidth = 1.0f;  // 描边宽度（默认1px）
     std::vector<DslLayer> children;
     DslAutoLayout autoLayout;
     // instance 字段
     std::string symbolId, variantKey, componentSetKey;
+    bool        componentSetResolved = true;  // 组件集是否可解析（默认true）
     std::vector<DslOverride> overrides;
     // text 字段
     std::string textContent;
@@ -342,6 +359,15 @@ static DslFill parseFill(const JVal &j) {
     return f;
 }
 
+static DslStroke parseStroke(const JVal &j) {
+    DslStroke s;
+    if (j.has("type"))    s.type    = j.get("type").asStr();
+    if (j.has("color"))   s.color   = j.get("color").asStr();
+    if (j.has("opacity")) s.opacity = j.get("opacity").asFloat();
+    if (j.has("visible")) s.visible = j.get("visible").asBool();
+    return s;
+}
+
 static DslLayer parseLayer(const JVal &j) {
     DslLayer l;
     if (j.has("id"))            l.id           = j.get("id").asStr();
@@ -351,11 +377,23 @@ static DslLayer parseLayer(const JVal &j) {
     if (j.has("opacity"))       l.opacity      = j.get("opacity").asFloat();
     if (j.has("blend_mode"))    l.blendMode    = j.get("blend_mode").asStr();
     if (j.has("corner_radius")) l.cornerRadius = j.get("corner_radius").asFloat();
+    // 独立圆角解析（优先级高于统一圆角）
+    if (j.has("corner_radii")) {
+        const JVal &cr = j.get("corner_radii");
+        if (cr.size() == 4) {
+            l.cornerRadiusTL = cr[0].asFloat();  // [TL, TR, BR, BL] 顺时针
+            l.cornerRadiusTR = cr[1].asFloat();
+            l.cornerRadiusBR = cr[2].asFloat();
+            l.cornerRadiusBL = cr[3].asFloat();
+            l.cornerRadiiIndependent = true;
+        }
+    }
     if (j.has("auto_layout")) {
         const JVal &al = j.get("auto_layout");
         l.autoLayout.enabled = true;
         if (al.has("direction"))        l.autoLayout.direction      = al.get("direction").asStr();
         if (al.has("gap"))              l.autoLayout.gap            = al.get("gap").asFloat();
+        if (al.has("counter_gap"))      l.autoLayout.counterGap     = al.get("counter_gap").asFloat();
         if (al.has("align_items"))      l.autoLayout.alignItems     = al.get("align_items").asStr();
         if (al.has("justify_content"))  l.autoLayout.justifyContent = al.get("justify_content").asStr();
         if (al.has("wrap"))             l.autoLayout.wrap           = al.get("wrap").asBool();
@@ -384,6 +422,12 @@ static DslLayer parseLayer(const JVal &j) {
         for (size_t i = 0; i < fills.size(); i++)
             l.fills.push_back(parseFill(fills[i]));
     }
+    if (j.has("strokes")) {
+        const JVal &strokes = j.get("strokes");
+        for (size_t i = 0; i < strokes.size(); i++)
+            l.strokes.push_back(parseStroke(strokes[i]));
+    }
+    if (j.has("stroke_width")) l.strokeWidth = j.get("stroke_width").asFloat();
     if (j.has("children")) {
         const JVal &children = j.get("children");
         for (size_t i = 0; i < children.size(); i++)
@@ -394,6 +438,7 @@ static DslLayer parseLayer(const JVal &j) {
         if (inst.has("symbol_id"))        l.symbolId        = inst.get("symbol_id").asStr();
         if (inst.has("variant_key"))       l.variantKey      = inst.get("variant_key").asStr();
         if (inst.has("component_set_key")) l.componentSetKey = inst.get("component_set_key").asStr();
+        if (inst.has("component_set_resolved")) l.componentSetResolved = inst.get("component_set_resolved").asBool();
         if (inst.has("overrides")) {
             const JVal &ovArr = inst.get("overrides");
             for (size_t i = 0; i < ovArr.size(); i++) {
@@ -832,8 +877,16 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
     sz->set_x(layer.box.w); sz->set_y(layer.box.h);
     n.set_size(sz);
 
-    if (layer.cornerRadius != 0.0f)
+    // 圆角处理：独立圆角优先，否则使用统一圆角
+    if (layer.cornerRadiiIndependent) {
+        n.set_rectangleCornerRadiiIndependent(true);
+        n.set_rectangleTopLeftCornerRadius(layer.cornerRadiusTL);
+        n.set_rectangleTopRightCornerRadius(layer.cornerRadiusTR);
+        n.set_rectangleBottomRightCornerRadius(layer.cornerRadiusBR);
+        n.set_rectangleBottomLeftCornerRadius(layer.cornerRadiusBL);
+    } else if (layer.cornerRadius != 0.0f) {
         n.set_cornerRadius(layer.cornerRadius);
+    }
 
     // PlaceholderMeta → pluginData（所有图层类型均处理）
     if (layer.placeholderEnabled) {
@@ -873,10 +926,33 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         }
     }
 
+    // strokes → strokePaints + strokeWeight
+    if (!layer.strokes.empty()) {
+        auto &paints = n.set_strokePaints(pool, (uint32_t)layer.strokes.size());
+        for (size_t i = 0; i < layer.strokes.size(); i++) {
+            const DslStroke &s = layer.strokes[i];
+            Paint &p = paints[i];
+            PaintType pt = PaintType::SOLID;
+            if (s.type == "gradient_linear") pt = PaintType::GRADIENT_LINEAR;
+            else if (s.type == "gradient_radial") pt = PaintType::GRADIENT_RADIAL;
+            p.set_type(pt);
+            p.set_visible(s.visible);
+            p.set_opacity(s.opacity);
+            p.set_blendMode(BlendMode::NORMAL);
+            if (!s.color.empty()) {
+                Color *c = parseColor(pool, s.color);
+                if (c) p.set_color(c);
+            }
+        }
+        // 描边宽度（默认为1，DSL中stroke_width可选）
+        n.set_strokeWeight(layer.strokeWidth > 0 ? layer.strokeWidth : 1.0f);
+    }
+
     if (layer.autoLayout.enabled) {
         const DslAutoLayout &al = layer.autoLayout;
         n.set_stackMode(al.direction == "horizontal" ? StackMode::HORIZONTAL : StackMode::VERTICAL);
         if (al.gap != 0.0f) n.set_stackSpacing(al.gap);
+        if (al.counterGap != 0.0f) n.set_stackCounterSpacing(al.counterGap);
         n.set_stackPaddingTop(al.padTop);
         n.set_stackPaddingRight(al.padRight);
         n.set_stackPaddingBottom(al.padBottom);

@@ -8,6 +8,7 @@ const express           = require('express');
 const multer            = require('multer');
 const { splitLibrary }   = require('./split_lib');
 const { loadSources, saveSources, rebuildIndex } = require('./rebuild_index');
+const createLogger      = require('../logger');
 
 const envFile = path.resolve(__dirname, '.env');
 if (fs.existsSync(envFile)) {
@@ -22,6 +23,11 @@ if (fs.existsSync(envFile)) {
 const app    = express();
 const PORT   = Number(process.env.PORT) || 3103;
 const upload = multer({ storage: multer.memoryStorage() });
+const logger = createLogger({
+  name: 'lib-admin-service',
+  level: process.env.LOG_LEVEL || 'info',
+  logDir: process.env.LOG_DIR
+});
 
 function expandTilde(p) {
   if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
@@ -32,24 +38,17 @@ const LIB_OUT_DIR = expandTilde(process.env.LIB_OUT_DIR || path.join(os.homedir(
 
 app.use(express.json());
 
-function logRouteResponse(label, status, message, extra) {
-  const extraStr = extra ? ` (${extra})` : '';
-  const line = `[${new Date().toISOString()}] ${label}${extraStr} 返回 ${status}：${message}`;
-  if (status >= 500) console.error(line);
-  else console.warn(line);
-}
-
 function sendError(res, label, status, payload, extra) {
   const message = (payload && typeof payload === 'object' && 'error' in payload)
     ? payload.error
     : JSON.stringify(payload);
-  logRouteResponse(label, status, message, extra);
-  return res.status(status).json(payload);
-}
-
-function logRouteEnter(label, extra) {
   const extraStr = extra ? ` (${extra})` : '';
-  console.log(`[${new Date().toISOString()}] ${label}${extraStr} 收到请求`);
+  if (status >= 500) {
+    logger.error(`${label}${extraStr} 返回 ${status}`, { message });
+  } else {
+    logger.warn(`${label}${extraStr} 返回 ${status}`, { message });
+  }
+  return res.status(status).json(payload);
 }
 
 const SEARCH_INDEX_PATH = path.join(LIB_OUT_DIR, 'search_index.json');
@@ -57,7 +56,7 @@ const hexPathMap = new Map();
 
 function buildHexPathMap() {
   if (!fs.existsSync(SEARCH_INDEX_PATH)) {
-    console.log(`hex 索引文件不存在: ${SEARCH_INDEX_PATH}，跳过加载`);
+    logger.info('hex 索引文件不存在，跳过加载', { path: SEARCH_INDEX_PATH });
     return 0;
   }
   const { entries } = JSON.parse(fs.readFileSync(SEARCH_INDEX_PATH, 'utf8'));
@@ -71,7 +70,7 @@ function buildHexPathMap() {
 }
 
 const loadedCount = buildHexPathMap();
-console.log(`hex 索引加载成功: ${loadedCount} 个 key（来源: ${SEARCH_INDEX_PATH}）`);
+logger.info('hex 索引加载成功', { count: loadedCount, source: SEARCH_INDEX_PATH });
 
 const KEY_RE = /^([a-f0-9]{40}|\d+_\d+)$/;
 const SOURCE_DIR_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
@@ -87,7 +86,7 @@ app.get('/sources', (req, res) => {
 app.post('/sources', (req, res) => {
   const key   = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
   const label = typeof req.body?.label === 'string' ? req.body.label.trim() : '';
-  logRouteEnter('POST /sources', `key="${key}", label="${label}"`);
+  logger.info('POST /sources 收到请求', { key, label });
 
   if (!key || !SOURCE_DIR_RE.test(key)) {
     return sendError(res, 'POST /sources', 400, { error: 'key must be a simple directory name (letters/digits/-/_, no path separators), matching the lib-out/ subdirectory' }, `key="${key}"`);
@@ -107,13 +106,13 @@ app.post('/sources', (req, res) => {
 });
 
 app.post('/rebuild-index', (req, res) => {
-  logRouteEnter('POST /rebuild-index');
+  logger.info('POST /rebuild-index 收到请求');
   try {
-    console.log('[server] /rebuild-index → 开始读取 sources.json 并重新生成 search_index.json');
+    logger.info('开始读取 sources.json 并重新生成 search_index.json');
     const result = rebuildIndex(LIB_OUT_DIR);
-    console.log(`[server] /rebuild-index → 索引已重写，开始重建 hexPathMap（entries=${result.entries}）`);
+    logger.info('索引已重写，开始重建 hexPathMap', { entries: result.entries });
     const hexKeys = buildHexPathMap();
-    console.log(`[server] /rebuild-index ✓ 完成：hex_keys=${hexKeys}`);
+    logger.info('rebuild-index 完成', { hex_keys: hexKeys });
     res.json({ ...result, hex_keys: hexKeys });
   } catch (err) {
     sendError(res, 'POST /rebuild-index', 500, { error: err.message });
@@ -125,13 +124,17 @@ const splitUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize
 
 app.post('/split', splitUpload.single('file'), async (req, res) => {
   if (!req.file) {
-    logRouteEnter('POST /split');
+    logger.info('POST /split 收到请求');
     return sendError(res, 'POST /split', 400, { error: 'send a .pix file via -F "file=@library.pix"' });
   }
 
   const publishFile = typeof req.body?.publishFile === 'string' ? req.body.publishFile.trim() : '';
   const source      = typeof req.body?.source === 'string' ? req.body.source.trim() : '';
-  logRouteEnter('POST /split', `file=${req.file.originalname} (${req.file.size} 字节), source="${source || '(未指定，返回 zip)'}"`);
+  logger.info('POST /split 收到请求', { 
+    file: req.file.originalname, 
+    size: req.file.size,
+    source: source || '(未指定，返回 zip)'
+  });
 
   if (source && !SOURCE_DIR_RE.test(source)) {
     return sendError(res, 'POST /split', 400, { error: 'source must be a simple directory name (letters/digits/-/_, no path separators)' }, `source="${source}"`);
@@ -144,10 +147,10 @@ app.post('/split', splitUpload.single('file'), async (req, res) => {
       opts.saveDir = path.join(LIB_OUT_DIR, source);
     }
 
-    console.log(`[server] POST /split → 调用 split_compset WASM 拆解 ${req.file.originalname}`);
+    logger.info('调用 split_compset WASM 拆解', { file: req.file.originalname });
     const result = await splitLibrary(req.file.buffer, opts);
     if (result.error) return sendError(res, 'POST /split', 500, { error: result.error }, req.file.originalname);
-    console.log(`[server] POST /split ✓ 完成：${JSON.stringify(result.stats || result)}`);
+    logger.info('split 完成', { stats: result.stats || result });
     res.json(result);
   } catch (err) {
     sendError(res, 'POST /split', 500, { error: err.message }, req.file.originalname);
@@ -156,7 +159,7 @@ app.post('/split', splitUpload.single('file'), async (req, res) => {
 
 app.get('/hex/:key', (req, res) => {
   const { key } = req.params;
-  logRouteEnter('GET /hex/:key', `key="${key}"`);
+  logger.info('GET /hex/:key 收到请求', { key });
 
   if (!KEY_RE.test(key)) {
     return sendError(res, 'GET /hex/:key', 400, { error: 'key must be a 40-char lowercase hex string or {sessionId}_{localId}' }, `key="${key}"`);
@@ -167,13 +170,13 @@ app.get('/hex/:key', (req, res) => {
     return sendError(res, 'GET /hex/:key', 404, { error: `component not found: ${key}` }, `key="${key}"`);
   }
 
-  console.log(`[server] GET /hex/:key (key="${key}") ✓ 命中：${filePath}`);
+  logger.info('GET /hex/:key 命中', { key, path: filePath });
   res.set('Content-Type', 'text/plain; charset=utf-8');
   fs.createReadStream(filePath).pipe(res);
 });
 
 app.get('/get-index', (req, res) => {
-  logRouteEnter('GET /get-index');
+  logger.info('GET /get-index 收到请求');
   if (!fs.existsSync(SEARCH_INDEX_PATH)) {
     return sendError(res, 'GET /get-index', 404, { error: 'search_index.json not found' });
   }
@@ -182,7 +185,5 @@ app.get('/get-index', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`lib-admin-service 已启动: http://localhost:${PORT}`);
-  console.log(`LIB_OUT_DIR: ${LIB_OUT_DIR}`);
-  console.log(`SEARCH_INDEX_PATH: ${SEARCH_INDEX_PATH}`);
+  logger.info('lib-admin-service 已启动', { port: PORT, LIB_OUT_DIR, SEARCH_INDEX_PATH });
 });

@@ -38,12 +38,14 @@ function buildQuery(layerName) {
 }
 
 function buildMatchResult(nodes, matches) {
-  return nodes.map((n, i) => ({
+  const result = nodes.map((n, i) => ({
     nid:        n.nid,
     layerType:  n.layerType,
     layerName:  n.layerName,
     match:      matches[i] || null,
   }));
+  logger.debug('buildMatchResult 结果', { count: result.length, matched: result.filter(r => r.match).length, result });
+  return result;
 }
 
 // 整页统一匹配：本页所有 layerType=component 节点合并成一次 LLM 裁决（见 matchVariantsTogether），

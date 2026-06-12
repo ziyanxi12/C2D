@@ -8,6 +8,7 @@ const multer            = require('multer');
 const { matchVariant, clearIndexCache } = require('./match_variant');
 const { matchVariants }  = require('./batch_match');
 const { matchDsl, matchDslSingle } = require('./match_dsl');
+const createLogger      = require('../logger');
 
 const envFile = path.resolve(__dirname, '.env');
 if (fs.existsSync(envFile)) {
@@ -22,29 +23,27 @@ if (fs.existsSync(envFile)) {
 const app    = express();
 const PORT   = Number(process.env.PORT) || 3102;
 const upload = multer({ storage: multer.memoryStorage() });
+const logger = createLogger({
+  name: 'dsl-match-service',
+  level: process.env.LOG_LEVEL || 'info',
+  logDir: process.env.LOG_DIR
+});
 
 const SEARCH_INDEX_PATH = process.env.SEARCH_INDEX_PATH || '/Users/h30072573/lib/search_index.json';
 
 app.use(express.json());
 
-function logRouteResponse(label, status, message, extra) {
-  const extraStr = extra ? ` (${extra})` : '';
-  const line = `[${new Date().toISOString()}] ${label}${extraStr} 返回 ${status}：${message}`;
-  if (status >= 500) console.error(line);
-  else console.warn(line);
-}
-
 function sendError(res, label, status, payload, extra) {
   const message = (payload && typeof payload === 'object' && 'error' in payload)
     ? payload.error
     : JSON.stringify(payload);
-  logRouteResponse(label, status, message, extra);
-  return res.status(status).json(payload);
-}
-
-function logRouteEnter(label, extra) {
   const extraStr = extra ? ` (${extra})` : '';
-  console.log(`[${new Date().toISOString()}] ${label}${extraStr} 收到请求`);
+  if (status >= 500) {
+    logger.error(`${label}${extraStr} 返回 ${status}`, { message });
+  } else {
+    logger.warn(`${label}${extraStr} 返回 ${status}`, { message });
+  }
+  return res.status(status).json(payload);
 }
 
 const MAX_DESCRIPTION_LENGTH = 200;
@@ -80,18 +79,21 @@ app.get('/health', (req, res) => {
 
 app.post('/match', async (req, res) => {
   const { description } = req.body || {};
-  const descLog = `description=${JSON.stringify(description)}`;
-  logRouteEnter('POST /match', descLog);
+  logger.info('POST /match 收到请求', { description });
 
   const descErr = checkDescription(description);
   if (descErr) {
-    return sendError(res, 'POST /match', 400, { error: descErr }, descLog);
+    return sendError(res, 'POST /match', 400, { error: descErr }, `description=${JSON.stringify(description)}`);
   }
   const trimmed = description.trim();
   try {
     const result = await matchVariant(trimmed);
     if (!result) return sendError(res, 'POST /match', 404, { error: 'no match found' }, `description="${trimmed}"`);
-    console.log(`[server] POST /match (description="${trimmed}") ✓ 命中：${result.componentSetName} / ${result.variant?.name || '(standalone)'}`);
+    logger.info('POST /match 命中', {
+      description: trimmed,
+      componentSetName: result.componentSetName,
+      variant: result.variant?.name || '(standalone)'
+    });
     res.json(result);
   } catch (err) {
     sendError(res, 'POST /match', 500, { error: err.message }, `description="${trimmed}"`);
@@ -101,7 +103,7 @@ app.post('/match', async (req, res) => {
 app.post('/batch', async (req, res) => {
   const body = req.body;
   let descriptions;
-  logRouteEnter('POST /batch', `body 类型=${Array.isArray(body) ? 'array' : typeof body}`);
+  logger.info('POST /batch 收到请求', { bodyType: Array.isArray(body) ? 'array' : typeof body });
 
   if (Array.isArray(body)) {
     descriptions = body.map(x => (typeof x === 'string' ? x : x.description));
@@ -127,11 +129,11 @@ app.post('/batch', async (req, res) => {
     return sendError(res, 'POST /batch', 400, { error: 'invalid descriptions', details: invalid }, `${invalid.length}/${descriptions.length} 条不合法`);
   }
 
-  console.log(`[server] POST /batch → 开始批量匹配 ${descriptions.length} 条描述（内部 5 并发）`);
+  logger.info('开始批量匹配', { count: descriptions.length });
   try {
     const results = await matchVariants(descriptions.map(d => d?.trim?.() ?? d));
     const hit = results.filter(r => r && !r.error).length;
-    console.log(`[server] POST /batch ✓ 完成：${descriptions.length} 条中 ${hit} 条命中`);
+    logger.info('批量匹配完成', { total: descriptions.length, hit });
     res.json(results);
   } catch (err) {
     sendError(res, 'POST /batch', 500, { error: err.message }, `${descriptions.length} 条描述`);
@@ -140,7 +142,7 @@ app.post('/batch', async (req, res) => {
 
 function readDslRequestBody(req, res, label) {
   if (req.file) {
-    console.log(`[server] ${label} → multipart 文件上传：${req.file.originalname}（${req.file.size} 字节）`);
+    logger.info(`${label} multipart 文件上传`, { file: req.file.originalname, size: req.file.size });
     try {
       return JSON.parse(req.file.buffer.toString('utf8'));
     } catch {
@@ -149,7 +151,7 @@ function readDslRequestBody(req, res, label) {
     }
   }
   if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
-    console.log(`[server] ${label} → JSON body，根节点 keys=[${Object.keys(req.body).join(', ')}]`);
+    logger.info(`${label} JSON body`, { keys: Object.keys(req.body).join(', ') });
     return req.body;
   }
   sendError(res, label, 400, { error: 'send a file via -F "file=@page.json" or a JSON body' });
@@ -157,14 +159,14 @@ function readDslRequestBody(req, res, label) {
 }
 
 app.post('/match-dsl', upload.single('file'), async (req, res) => {
-  logRouteEnter('POST /match-dsl');
+  logger.info('POST /match-dsl 收到请求');
   const nodeData = readDslRequestBody(req, res, 'POST /match-dsl');
   if (nodeData === undefined) return;
 
   try {
     const results = await matchDsl(nodeData);
     const hit = results.filter(r => r.match).length;
-    console.log(`[server] POST /match-dsl ✓ 完成：提取到 ${results.length} 个可匹配节点，命中 ${hit} 个`);
+    logger.info('match-dsl 完成', { total: results.length, hit });
     res.json(results);
   } catch (err) {
     sendError(res, 'POST /match-dsl', 500, { error: err.message });
@@ -172,14 +174,14 @@ app.post('/match-dsl', upload.single('file'), async (req, res) => {
 });
 
 app.post('/match-dsl-single', upload.single('file'), async (req, res) => {
-  logRouteEnter('POST /match-dsl-single');
+  logger.info('POST /match-dsl-single 收到请求');
   const nodeData = readDslRequestBody(req, res, 'POST /match-dsl-single');
   if (nodeData === undefined) return;
 
   try {
     const results = await matchDslSingle(nodeData);
     const hit = results.filter(r => r.match).length;
-    console.log(`[server] POST /match-dsl-single ✓ 完成：提取到 ${results.length} 个可匹配节点，命中 ${hit} 个`);
+    logger.info('match-dsl-single 完成', { total: results.length, hit });
     res.json(results);
   } catch (err) {
     sendError(res, 'POST /match-dsl-single', 500, { error: err.message });
@@ -187,6 +189,5 @@ app.post('/match-dsl-single', upload.single('file'), async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`dsl-match-service 已启动: http://localhost:${PORT}`);
-  console.log(`SEARCH_INDEX_PATH: ${SEARCH_INDEX_PATH}`);
+  logger.info('dsl-match-service 已启动', { port: PORT, SEARCH_INDEX_PATH });
 });

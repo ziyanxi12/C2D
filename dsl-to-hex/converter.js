@@ -4,9 +4,8 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const createLogger = require('../logger');
 
-
-// 自动加载同目录 .env
 const envFile = path.resolve(__dirname, '.env');
 if (fs.existsSync(envFile)) {
   fs.readFileSync(envFile, 'utf8').split('\n').forEach(line => {
@@ -14,6 +13,12 @@ if (fs.existsSync(envFile)) {
     if (k && v && !process.env[k.trim()]) process.env[k.trim()] = v.trim();
   });
 }
+
+const logger = createLogger({
+  name: 'dsl-to-hex',
+  level: process.env.LOG_LEVEL || 'info',
+  logDir: process.env.LOG_DIR
+});
 
 // 组件库 hex 根目录：与 component-service 的 LIB_OUT_DIR 指向同一份数据。
 // DSL 中 instance.path 是相对此目录的路径（如 "h-design-chart/component/93_55829.txt"），
@@ -108,7 +113,7 @@ async function readAllHex(refs) {
   for (const { key, path: relPath } of refs) {
     if (!relPath) {
       missingKeys.push(key);
-      console.warn(`[WARN] 组件缺少 path 字段，无法定位 hex 文件: ${key}`);
+      logger.warn('组件缺少 path 字段，无法定位 hex 文件', { key });
       continue;
     }
     const filePath = path.join(HEX_LIB_DIR, relPath);
@@ -116,7 +121,7 @@ async function readAllHex(refs) {
       hexMap[key] = await fs.promises.readFile(filePath, 'utf8');
     } catch (err) {
       missingKeys.push(key);
-      console.warn(`[WARN] 组件 hex 读取失败: ${filePath} (${err.message})`);
+      logger.warn('组件 hex 读取失败', { filePath, error: err.message, stack: err.stack });
     }
   }
   return { hexMap, missingKeys };

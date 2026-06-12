@@ -4,6 +4,7 @@
 const fs     = require('fs');
 const path   = require('path');
 const OpenAI = require('openai');
+const createLogger = require('../logger');
 
 // 自动加载同目录 .env
 const envFile = path.resolve(__dirname, '.env');
@@ -15,6 +16,12 @@ if (fs.existsSync(envFile)) {
     if (k && v && !process.env[k.trim()]) process.env[k.trim()] = v.trim();
   });
 }
+
+const logger = createLogger({
+  name: 'dsl-match-service',
+  level: process.env.LOG_LEVEL || 'info',
+  logDir: process.env.LOG_DIR
+});
 
 // LLM 相关配置全部可在 .env 中覆盖：
 //   DASHSCOPE_API_KEY  调用密钥（必填）
@@ -54,19 +61,24 @@ function formatForLog(value) {
 // 用于排查"为什么模型选了这个结果"——默认关闭，避免大 prompt 刷屏
 async function callLLM(label, params) {
   const start = Date.now();
-  console.log(`[match_variant] ${label} → 调用 ${BASE_URL} (model=${MODEL}, timeout=${TIMEOUT_MS}ms)`);
-  if (LOG_LLM_IO) {
-    console.log(`[match_variant] ${label} → 输入 messages：\n${formatForLog(params.messages)}`);
-  }
+  logger.debug(`${label} 调用 LLM`, { 
+    url: BASE_URL, 
+    model: MODEL, 
+    timeout: TIMEOUT_MS,
+    messages: JSON.stringify(params.messages)
+  });
+
   try {
     const response = await client.chat.completions.create(params);
-    console.log(`[match_variant] ${label} ✓ 完成，耗时 ${Date.now() - start}ms`);
-    if (LOG_LLM_IO) {
-      console.log(`[match_variant] ${label} → 输出 message：\n${formatForLog(response.choices[0]?.message)}`);
-    }
+    logger.info(`${label} 完成`, { duration: Date.now() - start });
+    logger.debug(`${label} 输出`, { response: JSON.stringify(response.choices[0]?.message) });
     return response;
   } catch (err) {
-    console.error(`[match_variant] ${label} ✗ 失败，耗时 ${Date.now() - start}ms：${err.message}`);
+    logger.error(`${label} 失败`, { 
+      duration: Date.now() - start, 
+      error: err.message,
+      stack: err.stack
+    });
     throw err;
   }
 }
@@ -105,7 +117,7 @@ function loadCanonicalMap() {
         _canonicalMap = stored;
         return _canonicalMap;
       }
-      console.log(`[match_variant] 规范映射表指纹不匹配（索引已更新），重置映射表`);
+      logger.info('规范映射表指纹不匹配，重置映射表');
     } catch {}
   }
   _canonicalMap = { _indexFingerprint: fingerprint };
@@ -128,8 +140,8 @@ function updateCanonicalMap(newEntries) {
     }
     fs.writeFileSync(CANONICAL_MAP_PATH, JSON.stringify(current, null, 2), 'utf8');
     _canonicalMap = current;
-    console.log(`[match_variant] 规范映射表写入 ${newEntries.length} 条，当前共 ${Object.keys(current).length - 1} 条`);
-  }).catch(err => console.error(`[match_variant] 规范映射表写入失败：${err.message}`));
+    logger.info('规范映射表写入完成', { newEntries: newEntries.length, total: Object.keys(current).length - 1 });
+  }).catch(err => logger.error('规范映射表写入失败', { error: err.message, stack: err.stack }));
   return _mapWriteLock;
 }
 
@@ -322,9 +334,9 @@ async function selectComponentSetsTogether(items, anchorNote = '') {
     }
   }
   const pool = [...poolMap.values()];
-  console.log(`[match_variant] selectComponentSetsTogether → ${items.length} 个元素，去重合并候选池 ${pool.length} 个组件集`);
+  logger.info('selectComponentSetsTogether 开始', { items: items.length, pool: pool.length });
   if (pool.length === 0) {
-    console.log('[match_variant] selectComponentSetsTogether → 候选池为空，全部跳过（本地过滤未命中任何组件集）');
+    logger.warn('selectComponentSetsTogether 候选池为空，全部跳过');
     return items.map(() => null);
   }
 
@@ -365,19 +377,31 @@ async function selectComponentSetsTogether(items, anchorNote = '') {
   const toolCall = response.choices[0]?.message?.tool_calls?.[0];
   const guids = toolCall ? (JSON.parse(toolCall.function.arguments).guids || []) : [];
   if (guids.length !== items.length) {
-    console.warn(`[match_variant] selectComponentSetsTogether ⚠ 模型返回 ${guids.length} 项，与输入 ${items.length} 个元素数量不一致，多余/缺失的位置会按 null 处理`);
+    logger.warn('selectComponentSetsTogether 模型返回数量不一致', { 
+      returned: guids.length, 
+      expected: items.length 
+    });
   }
 
   const picked = items.map((_, i) => pool.find(c => (c.guid || c.componentKey) === guids[i]) || null);
-  console.log(`[match_variant] selectComponentSetsTogether ✓ 完成：${picked.filter(Boolean).length}/${items.length} 个元素选到了组件集，去重后涉及 ${new Set(picked.filter(Boolean)).size} 个不同组件集`);
+  logger.info('selectComponentSetsTogether 完成', { 
+    matched: picked.filter(Boolean).length, 
+    total: items.length, 
+    uniqueSets: new Set(picked.filter(Boolean)).size 
+  });
   return picked;
 }
 
 async function selectVariantsTogether(entry, items, anchorNote = '') {
   const variants = entry.variants || [];
-  console.log(`[match_variant] selectVariantsTogether → 组件集「${entry.name}」(${entry.sourceLabel})，本组 ${items.length} 个元素，候选 ${variants.length} 个变体`);
+  logger.info('selectVariantsTogether 开始', { 
+    componentSet: entry.name, 
+    source: entry.sourceLabel, 
+    items: items.length, 
+    variants: variants.length 
+  });
   if (variants.length === 0) {
-    console.log(`[match_variant] selectVariantsTogether → 「${entry.name}」是 standalone 组件，无变体可选，本组 ${items.length} 个元素直接返回`);
+    logger.info(`${entry.name} 是 standalone 组件，无变体可选`);
     return items.map(() => ({ variantKey: null, reason: '该组件为 standalone，无变体' }));
   }
 
@@ -425,7 +449,11 @@ async function selectVariantsTogether(entry, items, anchorNote = '') {
   const toolCall = response.choices[0]?.message?.tool_calls?.[0];
   const rawPicks = toolCall ? (JSON.parse(toolCall.function.arguments).picks || []) : [];
   if (rawPicks.length !== items.length) {
-    console.warn(`[match_variant] selectVariantsTogether ⚠ 「${entry.name}」模型返回 ${rawPicks.length} 项，与本组 ${items.length} 个元素数量不一致，多余/缺失的位置会按 null 处理`);
+    logger.warn('selectVariantsTogether 模型返回数量不一致', { 
+      componentSet: entry.name,
+      returned: rawPicks.length, 
+      expected: items.length 
+    });
   }
 
   const result = items.map((_, i) => {
@@ -435,7 +463,11 @@ async function selectVariantsTogether(entry, items, anchorNote = '') {
     if (!variant) return null;
     return { variantKey: variant.variantKey || variant.guid, reason: p.reason };
   });
-  console.log(`[match_variant] selectVariantsTogether ✓ 「${entry.name}」完成：${result.filter(Boolean).length}/${items.length} 个元素选到了变体`);
+  logger.info('selectVariantsTogether 完成', { 
+    componentSet: entry.name,
+    matched: result.filter(Boolean).length, 
+    total: items.length 
+  });
   return result;
 }
 
@@ -462,7 +494,7 @@ function toMatchResult(entry, picked) {
 async function matchVariantsTogether(queries) {
   const { entries } = loadIndex();
   const canonicalMap = loadCanonicalMap();
-  console.log(`[match_variant] matchVariantsTogether（整页统一匹配）开始：共 ${queries.length} 条查询`);
+  logger.info('matchVariantsTogether（整页统一匹配）开始', { queries: queries.length });
   if (queries.length === 0) return [];
 
   // Step 0: 按归一化文本聚类，相同 query 只解析一次，结果广播给全簇
@@ -472,7 +504,7 @@ async function matchVariantsTogether(queries) {
     if (!clusterMap.has(key)) clusterMap.set(key, { representativeQuery: query, indices: [] });
     clusterMap.get(key).indices.push(i);
   });
-  console.log(`[match_variant] Step 0 聚类：${queries.length} 条 → ${clusterMap.size} 个独立簇`);
+  logger.info('Step 0 聚类', { queries: queries.length, clusters: clusterMap.size });
 
   // Step 1: 查规范映射表，整簇命中的直接采用（不进 LLM）
   const confirmedByIndex = new Map(); // originalIndex -> matchResult
@@ -486,17 +518,20 @@ async function matchVariantsTogether(queries) {
         ? (comp.variants || []).find(v => (v.variantKey || v.guid) === mapped.variantKey)
         : null;
       if (comp && (mapped.variantKey == null || variant)) {
-        console.log(`[match_variant] 规范映射表命中「${key}」(${cluster.indices.length} 个实例)`);
+        logger.info('规范映射表命中', { key, instances: cluster.indices.length });
         const result = toMatchResult(comp, { variantKey: mapped.variantKey, reason: '' });
         cluster.indices.forEach(i => confirmedByIndex.set(i, result));
         continue;
       }
-      console.log(`[match_variant] 规范映射表条目「${key}」已失效（组件或变体不存在），重新裁决`);
+      logger.warn('规范映射表条目已失效，重新裁决', { key });
       delete canonicalMap[key];
     }
     pendingKeys.push(key);
   }
-  console.log(`[match_variant] Step 1 规范映射表：${clusterMap.size - pendingKeys.length} 簇命中，${pendingKeys.length} 簇待 LLM`);
+  logger.info('Step 1 规范映射表', { 
+    hit: clusterMap.size - pendingKeys.length, 
+    pending: pendingKeys.length 
+  });
 
   // 对齐基准：把已确认的结果注入到 LLM prompt，让模型参照保持一致
   let anchorNote = '';
@@ -517,7 +552,7 @@ async function matchVariantsTogether(queries) {
 
   if (pendingKeys.length === 0) {
     const final = queries.map((_, i) => confirmedByIndex.get(i) || null);
-    console.log(`[match_variant] matchVariantsTogether ✓ 全部命中映射表：${final.filter(Boolean).length}/${queries.length}`);
+    logger.info('matchVariantsTogether 全部命中映射表', { matched: final.filter(Boolean).length, total: queries.length });
     return final;
   }
 
@@ -532,21 +567,25 @@ async function matchVariantsTogether(queries) {
     };
   });
   const matchable = clusterItems.filter(ci => ci.candidates.length > 0);
-  console.log(`[match_variant] Step 2 本地过滤：${matchable.length}/${pendingKeys.length} 个待处理簇有候选，${pendingKeys.length - matchable.length} 个未命中（直接判 null）`);
+  logger.info('Step 2 本地过滤', { 
+    matchable: matchable.length, 
+    pending: pendingKeys.length,
+    nullCount: pendingKeys.length - matchable.length 
+  });
 
   if (matchable.length === 0) {
     const final = queries.map((_, i) => confirmedByIndex.get(i) || null);
-    console.log(`[match_variant] matchVariantsTogether ✓ 完成：${final.filter(Boolean).length}/${queries.length}`);
+    logger.info('matchVariantsTogether 完成', { matched: final.filter(Boolean).length, total: queries.length });
     return final;
   }
 
   // Step 3: 一次性选组件集，每个簇一个代表（而非每条实例一个）
-  console.log(`[match_variant] Step 3：${matchable.length} 个簇一次性交给 LLM 选组件集`);
+  logger.info('Step 3 开始', { clusters: matchable.length });
   let pickedEntries;
   try {
     pickedEntries = await selectComponentSetsTogether(matchable, anchorNote);
   } catch (err) {
-    console.warn(`[match_variant] selectComponentSetsTogether 失败（${err.message}），全部算法兜底`);
+    logger.warn('selectComponentSetsTogether 失败，全部算法兜底', { error: err.message, stack: err.stack });
     pickedEntries = matchable.map(() => null);
   }
 
@@ -558,12 +597,15 @@ async function matchVariantsTogether(queries) {
     if (!entry) {
       entry = ci.candidates[0];
       isFallback = true;
-      console.log(`[match_variant] matchVariantsTogether → 「${ci.query}」LLM 未选组件集，算法兜底「${entry.name}」`);
+      logger.info(`${ci.query} LLM 未选组件集，算法兜底`, { fallback: entry.name });
     }
     if (!groups.has(entry)) groups.set(entry, []);
     groups.get(entry).push({ ci, isFallback });
   });
-  console.log(`[match_variant] Step 4：按组件集分成 ${groups.size} 组（${[...groups.entries()].map(([e, g]) => `${e.name}×${g.length}`).join('、') || '(无)'}）`);
+  logger.info('Step 4 分组', { 
+    groups: groups.size, 
+    distribution: [...groups.entries()].map(([e, g]) => `${e.name}×${g.length}`).join('、') || '(无)'
+  });
 
   const resultByIndex = new Map(confirmedByIndex);
   const newMapEntries = [];
@@ -573,7 +615,11 @@ async function matchVariantsTogether(queries) {
     try {
       picks = await selectVariantsTogether(entry, groupItems.map(g => g.ci), anchorNote);
     } catch (err) {
-      console.warn(`[match_variant] selectVariantsTogether「${entry.name}」失败（${err.message}），算法兜底`);
+      logger.warn('selectVariantsTogether 失败，算法兜底', { 
+        componentSet: entry.name, 
+        error: err.message, 
+        stack: err.stack 
+      });
       picks = groupItems.map(() => null);
     }
     groupItems.forEach(({ ci, isFallback }, j) => {
@@ -582,7 +628,7 @@ async function matchVariantsTogether(queries) {
       if (!pick) {
         pick = pickBestVariant(entry, ci.query);
         usedFallback = true;
-        console.log(`[match_variant] matchVariantsTogether → 「${ci.query}」LLM 未选变体，算法兜底「${entry.name}」`);
+        logger.info(`${ci.query} LLM 未选变体，算法兜底`, { componentSet: entry.name });
       }
       const result = toMatchResult(entry, pick);
       if (result && usedFallback) result.fallback = true;
@@ -598,8 +644,8 @@ async function matchVariantsTogether(queries) {
     await updateCanonicalMap(newMapEntries);
   }
 
-  const final = queries.map((_, i) => resultByIndex.get(i) || null);
-  console.log(`[match_variant] matchVariantsTogether ✓ 完成：${final.filter(Boolean).length}/${queries.length}`);
+const final = queries.map((_, i) => resultByIndex.get(i) || null);
+  logger.info('matchVariantsTogether 完成', { matched: final.filter(Boolean).length, total: queries.length });
   return final;
 }
 
@@ -608,7 +654,7 @@ async function matchVariantsTogether(queries) {
 async function matchVariant(description) {
   const { entries } = loadIndex();
   const canonicalMap = loadCanonicalMap();
-  console.log(`[match_variant] matchVariant 开始：「${description}」`);
+  logger.info('matchVariant 开始', { description });
 
   // 查规范映射表（0 次 LLM 快速返回）
   const cKey = canonicalKey(description);
@@ -619,10 +665,10 @@ async function matchVariant(description) {
       ? (comp.variants || []).find(v => (v.variantKey || v.guid) === mapped.variantKey)
       : null;
     if (comp && (mapped.variantKey == null || variant)) {
-      console.log(`[match_variant] matchVariant → 规范映射表命中，跳过 LLM`);
+      logger.info('matchVariant 规范映射表命中，跳过 LLM');
       return toMatchResult(comp, { variantKey: mapped.variantKey, reason: '' });
     }
-    console.log(`[match_variant] matchVariant → 规范映射表条目已失效（组件或变体不存在），重新裁决`);
+    logger.warn('matchVariant 规范映射表条目已失效，重新裁决');
     delete canonicalMap[cKey];
   }
 
@@ -631,13 +677,13 @@ async function matchVariant(description) {
   const chineseCount = (nonSpace.match(/[一-鿿]/g) || []).length;
   let searchQuery;
   if (nonSpace.length > 0 && chineseCount / nonSpace.length >= 0.3) {
-    console.log(`[match_variant] matchVariant → 描述已含中文（${Math.round(chineseCount / nonSpace.length * 100)}%），跳过语义提取`);
+    logger.info('matchVariant 描述已含中文，跳过语义提取', { percentage: Math.round(chineseCount / nonSpace.length * 100) });
     searchQuery = description;
   } else {
     try {
       searchQuery = await normalizeQuery(description);
     } catch (err) {
-      console.warn(`[match_variant] matchVariant → normalizeQuery 失败（${err.message}），使用原始描述`);
+      logger.warn('matchVariant normalizeQuery 失败，使用原始描述', { error: err.message, stack: err.stack });
       searchQuery = description;
     }
   }
@@ -652,10 +698,10 @@ async function matchVariant(description) {
   try {
     entry = await selectComponentSet(description, candidates);
   } catch (err) {
-    console.warn(`[match_variant] matchVariant → selectComponentSet 失败（${err.message}），算法兜底`);
+    logger.warn('matchVariant selectComponentSet 失败，算法兜底', { error: err.message, stack: err.stack });
   }
   if (!entry) {
-    console.log(`[match_variant] matchVariant → LLM 未选出组件集，算法兜底「${candidates[0].name}」`);
+    logger.info('matchVariant LLM 未选出组件集，算法兜底', { fallback: candidates[0].name });
     entry = candidates[0];
     usedFallback = true;
   }
@@ -665,10 +711,10 @@ async function matchVariant(description) {
   try {
     picked = await selectVariant(description, entry);
   } catch (err) {
-    console.warn(`[match_variant] matchVariant → selectVariant 失败（${err.message}），算法兜底`);
+    logger.warn('matchVariant selectVariant 失败，算法兜底', { error: err.message, stack: err.stack });
   }
   if (!picked) {
-    console.log(`[match_variant] matchVariant → LLM 未选出变体，算法兜底`);
+    logger.info('matchVariant LLM 未选出变体，算法兜底');
     picked = pickBestVariant(entry, description);
     usedFallback = true;
   }
@@ -708,8 +754,14 @@ if (require.main === module) {
     }
     return matchVariant(description);
   })()
-    .then(r => console.log(JSON.stringify(r, null, 2)))
-    .catch(err => { console.error(err.message); process.exit(1); });
+    .then(r => {
+      if (r) logger.info('CLI 匹配结果', { result: r });
+      else logger.warn('CLI 无匹配结果');
+    })
+    .catch(err => { 
+      logger.error('CLI 错误', { error: err.message, stack: err.stack });
+      process.exit(1);
+    });
 }
 
 module.exports = { matchVariant, matchVariantsTogether, clearIndexCache, loadIndex };

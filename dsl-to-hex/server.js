@@ -2,11 +2,14 @@
 
 const http      = require('http');
 const { convert, getWasm, HEX_LIB_DIR } = require('./converter');
+const createLogger = require('../logger');
 
-// ---------------------------------------------------------------------------
-// 配置
-// ---------------------------------------------------------------------------
 const PORT = Number(process.env.PORT) || 3101;
+const logger = createLogger({
+  name: 'dsl-to-hex',
+  level: process.env.LOG_LEVEL || 'info',
+  logDir: process.env.LOG_DIR
+});
 
 // ---------------------------------------------------------------------------
 // 工具函数
@@ -70,25 +73,24 @@ async function handle(req, res) {
 // 启动服务（预热 WASM）
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log('预热 WASM...');
+  logger.info('预热 WASM');
   try {
     await getWasm();
-    console.log('WASM 加载成功');
+    logger.info('WASM 加载成功');
   } catch (e) {
-    console.error('WASM 加载失败:', e.message);
+    logger.error('WASM 加载失败', { error: e.message, stack: e.stack });
     process.exit(1);
   }
 
   const server = http.createServer((req, res) => {
     handle(req, res).catch(err => {
-      console.error('请求处理异常:', err);
+      logger.error('请求处理异常', { error: err.message, stack: err.stack });
       if (!res.headersSent) sendJSON(res, 500, { error: 'internal server error' });
     });
   });
 
   server.listen(PORT, () => {
-    console.log(`\nDSL转hex服务已启动: http://localhost:${PORT}`);
-    console.log(`HEX_LIB_DIR: ${HEX_LIB_DIR}\n`);
+    logger.info('dsl-to-hex 服务已启动', { port: PORT, HEX_LIB_DIR });
   });
 }
 

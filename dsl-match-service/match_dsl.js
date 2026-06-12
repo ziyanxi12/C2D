@@ -3,6 +3,13 @@
 
 const { matchVariantsTogether } = require('./match_variant');
 const { matchVariants }         = require('./batch_match');
+const createLogger              = require('../logger');
+
+const logger = createLogger({
+  name: 'dsl-match-service',
+  level: process.env.LOG_LEVEL || 'info',
+  logDir: process.env.LOG_DIR
+});
 
 // 只匹配 layerType 为 component 的节点
 const MATCHABLE_LAYERTYPE = 'component';
@@ -45,7 +52,10 @@ function buildMatchResult(nodes, matches) {
 async function matchDsl(nodeOrArray) {
   const nodes = collectNodes(nodeOrArray);
   console.log(`[match_dsl] matchDsl（整页统一匹配）→ 提取到 ${nodes.length} 个 layerType=component 节点`);
-  if (nodes.length === 0) return [];
+  if (nodes.length === 0) {
+    console.log(`[match_dsl] matchDsl ✓ 完成：0 个节点中命中 0 个`);
+    return [];
+  }
 
   const queries = nodes.map(n => buildQuery(n.layerName));
   console.log(`[match_dsl] matchDsl → 查询词：${JSON.stringify(queries)}`);
@@ -61,7 +71,10 @@ async function matchDsl(nodeOrArray) {
 async function matchDslSingle(nodeOrArray) {
   const nodes = collectNodes(nodeOrArray);
   console.log(`[match_dsl] matchDslSingle（逐节点独立匹配）→ 提取到 ${nodes.length} 个 layerType=component 节点`);
-  if (nodes.length === 0) return [];
+  if (nodes.length === 0) {
+    console.log(`[match_dsl] matchDslSingle ✓ 完成：0 个节点中命中 0 个`);
+    return [];
+  }
 
   const queries = nodes.map(n => buildQuery(n.layerName));
   console.log(`[match_dsl] matchDslSingle → 查询词：${JSON.stringify(queries)}`);
@@ -87,8 +100,13 @@ function readStdin() {
 if (require.main === module) {
   readStdin()
     .then(raw => matchDsl(JSON.parse(raw)))
-    .then(r => console.log(JSON.stringify(r, null, 2)))
-    .catch(err => { console.error(err.message); process.exit(1); });
+    .then(r => {
+      logger.info('CLI matchDsl 完成', { results: r.length });
+    })
+    .catch(err => {
+      logger.error('CLI 错误', { error: err.message, stack: err.stack });
+      process.exit(1);
+    });
 }
 
 module.exports = { matchDsl, matchDslSingle };

@@ -226,7 +226,7 @@ async function convert(dsl) {
     // 4. 调用 WASM（同步，阻塞事件循环，单线程自然串行）
     logger.debug('调用 WASM 转换');
     const mod = await getWasm();
-    const raw = mod.dslToHex(dslPath, tmpDir);
+    const raw = mod.dslToHex(dslPath, tmpDir, '');
     logger.debug('WASM 转换完成', { resultType: raw.startsWith('{"error"') ? 'error' : raw.startsWith('{"hex"') ? 'hex_with_missing' : 'hex' });
 
     // 5. 解析结果

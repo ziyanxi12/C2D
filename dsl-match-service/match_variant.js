@@ -481,7 +481,7 @@ function toMatchResult(entry, picked) {
   const resultVariant = variant
     ? { name: variant.name, variantKey: variant.variantKey || variant.guid, guid: variant.guid }
     : (variants.length === 0
-      ? { name: '(standalone)', variantKey: componentKey, guid: componentKey }
+      ? { name: '(standalone)', variantKey: componentKey, guid: entry.guid || componentKey }
       : null);
 
   return {

@@ -897,8 +897,6 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
         else if (strcmp(nm, ".$Table-Col-Header") == 0) tmpl.tmplHeader = &n;
         else if (strcmp(nm, ".$Table-Col-Body") == 0)   tmpl.tmplBody   = &n;
         else if (strcmp(nm, ".$Table-Cell") == 0)       tmpl.tmplCell   = &n;
-        else if (n.type() && *n.type() == NodeType::RECTANGLE)
-            tmpl.tmplRect = &n;
         else if (n.type() && *n.type() == NodeType::FRAME
                  && n.parentIndex() && n.parentIndex()->guid()) {
             // 根 FRAME：父节点是 CANVAS
@@ -912,6 +910,25 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
                 if (cs2 == ps && cl2 == pl && !pn.internalOnly()) {
                     tmpl.tmplRoot = &n; break;
                 }
+            }
+        }
+    }
+
+    // tmplRect：tmplRoot 的直接子节点中，不是 $Table 的那个（类型不限）
+    if (tmpl.tmplRoot && tmpl.tmplTable) {
+        uint32_t rootS = tmpl.tmplRoot->guid()->sessionID() ? *tmpl.tmplRoot->guid()->sessionID() : 0;
+        uint32_t rootL = tmpl.tmplRoot->guid()->localID()   ? *tmpl.tmplRoot->guid()->localID()   : 0;
+        uint32_t tableS = tmpl.tmplTable->guid()->sessionID() ? *tmpl.tmplTable->guid()->sessionID() : 0;
+        uint32_t tableL = tmpl.tmplTable->guid()->localID()   ? *tmpl.tmplTable->guid()->localID()   : 0;
+        auto it = pmap.find(gkStr(rootS, rootL));
+        if (it != pmap.end()) {
+            for (const PixsoNode *child : it->second) {
+                if (!child->guid()) continue;
+                uint32_t cs = child->guid()->sessionID() ? *child->guid()->sessionID() : 0;
+                uint32_t cl = child->guid()->localID()   ? *child->guid()->localID()   : 0;
+                if (cs == tableS && cl == tableL) continue;  // 跳过 $Table
+                tmpl.tmplRect = child;
+                break;
             }
         }
     }
@@ -1190,15 +1207,15 @@ static void fillTableNode(
         }
     }
 
-    // === 4. 矩形分隔（clone tmplRect）===
+    // === 4. 第二子节点（clone tmplRect，不修改任何位置/尺寸，原样克隆）===
     {
         auto [rectS, rectL] = nextGuid();
         PixsoNode &n = arr[idx++];
         cloneStructNode(pool, n, *tmpl.tmplRect,
                         rectS, rectL,
                         rootS, rootL, makePos(1),
-                        0.f, colH + rootGap,
-                        tableW, kNO,
+                        kNO, kNO,
+                        kNO, kNO,
                         blobRemap);
     }
 }

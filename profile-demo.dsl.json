@@ -1,0 +1,570 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "source": "pixso",
+    "file_id": "profile-demo-20260613",
+    "file_name": "个人展示页",
+    "created_at": "2026-06-13T00:00:00Z",
+    "updated_at": "2026-06-13T12:00:00Z"
+  },
+  "pages": [
+    {
+      "id": "1:1",
+      "name": "个人展示页",
+      "layers": [
+        {
+          "id": "2:1",
+          "name": "页面容器",
+          "type": "frame",
+          "visible": true,
+          "opacity": 1,
+          "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 390, "height": 844 },
+          "fills": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#F0F2F5FF" }],
+          "children": [
+
+            {
+              "id": "3:1",
+              "name": "头部区域",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 390, "height": 280 },
+              "fills": [
+                {
+                  "type": "gradient_linear",
+                  "visible": true,
+                  "opacity": 1,
+                  "stops": [
+                    { "color": "#1677FFFF", "position": 0 },
+                    { "color": "#722ED1FF", "position": 1 }
+                  ]
+                }
+              ],
+              "children": [
+                {
+                  "id": "4:1",
+                  "name": "用户头像",
+                  "type": "ellipse",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 155, "y": 40, "width": 80, "height": 80 },
+                  "fills": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#FFFFFFFF" }],
+                  "strokes": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#FFFFFF66" }],
+                  "stroke_width": 3,
+                  "placeholder": {
+                    "is_placeholder": true,
+                    "replacement_type": "svg",
+                    "note": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 80 80\"><defs><clipPath id=\"c\"><circle cx=\"40\" cy=\"40\" r=\"40\"/></clipPath></defs><circle cx=\"40\" cy=\"40\" r=\"40\" fill=\"#4096FF\"/><circle cx=\"40\" cy=\"27\" r=\"15\" fill=\"#FFFFFF\" opacity=\"0.95\"/><path d=\"M8 76 Q8 52 40 52 Q72 52 72 76 L72 80 L8 80 Z\" fill=\"#FFFFFF\" opacity=\"0.95\"/><circle cx=\"40\" cy=\"40\" r=\"40\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2\" opacity=\"0.3\" clip-path=\"url(#c)\"/></svg>"
+                  }
+                },
+                {
+                  "id": "4:2",
+                  "name": "用户名称",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 0, "y": 140, "width": 390, "height": 32 },
+                  "text_content": "李明远",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Bold",
+                    "font_size": 22,
+                    "color": "#FFFFFFFF",
+                    "letter_spacing": 1,
+                    "line_height": 32,
+                    "align_h": "center",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "4:3",
+                  "name": "职位描述",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 0, "y": 180, "width": 390, "height": 24 },
+                  "text_content": "高级前端工程师 · ICT 研发部",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Regular",
+                    "font_size": 14,
+                    "color": "#FFFFFFCC",
+                    "letter_spacing": 0,
+                    "line_height": 24,
+                    "align_h": "center",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "4:4",
+                  "name": "所在城市",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 0, "y": 212, "width": 390, "height": 20 },
+                  "text_content": "北京，中国",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Regular",
+                    "font_size": 12,
+                    "color": "#FFFFFF99",
+                    "letter_spacing": 0,
+                    "line_height": 20,
+                    "align_h": "center",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "4:5",
+                  "name": "关注按钮",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 104, "y": 244, "width": 80, "height": 32 },
+                  "instance": {
+                    "symbol_id": "4280:102991",
+                    "variant_key": "1db35593ea9d14e17bb6b886364e66f9dd82fabc",
+                    "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                    "variant_props": {
+                      "status": "primary",
+                      "Interaction": "default",
+                      "size": "normal",
+                      "disabled": "false"
+                    },
+                    "overrides": []
+                  }
+                },
+                {
+                  "id": "4:6",
+                  "name": "私信按钮",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 206, "y": 244, "width": 80, "height": 32 },
+                  "instance": {
+                    "symbol_id": "4280:103035",
+                    "variant_key": "325201e6d6e069c39af66b004a0260edeab8563d",
+                    "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                    "variant_props": {
+                      "status": "default",
+                      "Interaction": "default",
+                      "size": "large",
+                      "disabled": "false"
+                    },
+                    "overrides": []
+                  }
+                }
+              ]
+            },
+
+            {
+              "id": "5:1",
+              "name": "技能标签卡片",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 16, "y": 296, "width": 358, "height": 96 },
+              "fills": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#FFFFFFFF" }],
+              "effects": [
+                {
+                  "type": "drop_shadow",
+                  "visible": true,
+                  "offset_x": 0,
+                  "offset_y": 2,
+                  "blur": 8,
+                  "spread": 0,
+                  "color": "#00000014"
+                }
+              ],
+              "corner_radius": 12,
+              "children": [
+                {
+                  "id": "5:2",
+                  "name": "技能标签标题",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 16, "width": 80, "height": 20 },
+                  "text_content": "专业技能",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Medium",
+                    "font_size": 14,
+                    "color": "#1A1A1AFF",
+                    "letter_spacing": 0,
+                    "line_height": 20,
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "5:3",
+                  "name": "标签-前端开发",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 48, "width": 80, "height": 24 },
+                  "instance": {
+                    "symbol_id": "4718:41109",
+                    "variant_key": "3c14e47dd7957399dd4b4264a5bcc15785468009",
+                    "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "variant_props": {
+                      "_color": "Info蓝色",
+                      "size": "normal"
+                    },
+                    "overrides": []
+                  }
+                },
+                {
+                  "id": "5:4",
+                  "name": "标签-UI设计",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 108, "y": 48, "width": 72, "height": 24 },
+                  "instance": {
+                    "symbol_id": "4718:41111",
+                    "variant_key": "eb6d68c0a1d28b93b47478f275ec622c0eca9bcc",
+                    "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "variant_props": {
+                      "_color": "success绿色",
+                      "size": "normal"
+                    },
+                    "overrides": []
+                  }
+                },
+                {
+                  "id": "5:5",
+                  "name": "标签-产品思维",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 192, "y": 48, "width": 80, "height": 24 },
+                  "instance": {
+                    "symbol_id": "4718:41113",
+                    "variant_key": "04e2f3cbd79512f672f9e1d1def7535c473a628c",
+                    "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "variant_props": {
+                      "_color": "warn黄色",
+                      "size": "normal"
+                    },
+                    "overrides": []
+                  }
+                },
+                {
+                  "id": "5:6",
+                  "name": "标签-架构设计",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 284, "y": 48, "width": 60, "height": 24 },
+                  "instance": {
+                    "symbol_id": "4718:41115",
+                    "variant_key": "885696a38961bb73ee8ccd828ae58db715dcc274",
+                    "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "variant_props": {
+                      "_color": "Alert橙色",
+                      "size": "normal"
+                    },
+                    "overrides": []
+                  }
+                }
+              ]
+            },
+
+            {
+              "id": "6:1",
+              "name": "综合评分卡片",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 16, "y": 408, "width": 358, "height": 88 },
+              "fills": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#FFFFFFFF" }],
+              "effects": [
+                {
+                  "type": "drop_shadow",
+                  "visible": true,
+                  "offset_x": 0,
+                  "offset_y": 2,
+                  "blur": 8,
+                  "spread": 0,
+                  "color": "#00000014"
+                }
+              ],
+              "corner_radius": 12,
+              "children": [
+                {
+                  "id": "6:2",
+                  "name": "评分标题",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 16, "width": 80, "height": 20 },
+                  "text_content": "综合评分",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Medium",
+                    "font_size": 14,
+                    "color": "#1A1A1AFF",
+                    "letter_spacing": 0,
+                    "line_height": 20,
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "6:3",
+                  "name": "评分组件",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 46, "width": 220, "height": 28 },
+                  "instance": {
+                    "symbol_id": "4532:39038",
+                    "variant_key": "84336a12891e5f86f1165e4a409c86abd90ee807",
+                    "component_set_key": "0ecd68df646234cc9236b5dbef4ac9aefdc2cf61",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/0ecd68df646234cc9236b5dbef4ac9aefdc2cf61.txt",
+                    "variant_props": {
+                      "disabled": "false",
+                      "type": "number",
+                      "position": "right",
+                      "value": "4.5",
+                      "starCount": "5"
+                    },
+                    "overrides": []
+                  }
+                }
+              ]
+            },
+
+            {
+              "id": "7:1",
+              "name": "技能水平卡片",
+              "type": "frame",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 16, "y": 512, "width": 358, "height": 200 },
+              "fills": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#FFFFFFFF" }],
+              "effects": [
+                {
+                  "type": "drop_shadow",
+                  "visible": true,
+                  "offset_x": 0,
+                  "offset_y": 2,
+                  "blur": 8,
+                  "spread": 0,
+                  "color": "#00000014"
+                }
+              ],
+              "corner_radius": 12,
+              "children": [
+                {
+                  "id": "7:2",
+                  "name": "技能水平标题",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 16, "width": 80, "height": 20 },
+                  "text_content": "技能水平",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Medium",
+                    "font_size": 14,
+                    "color": "#1A1A1AFF",
+                    "letter_spacing": 0,
+                    "line_height": 20,
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "7:3",
+                  "name": "技能-JavaScript",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 52, "width": 90, "height": 18 },
+                  "text_content": "JavaScript",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Regular",
+                    "font_size": 12,
+                    "color": "#595959FF",
+                    "letter_spacing": 0,
+                    "line_height": 18,
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "7:4",
+                  "name": "进度条-JavaScript",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 116, "y": 46, "width": 226, "height": 28 },
+                  "instance": {
+                    "symbol_id": "4854:136939",
+                    "variant_key": "b40abc5b7b78df96b5e97c78645f64033c59a9df",
+                    "component_set_key": "11120b95d1ad0ffa9b21e2a62cb761880e04f47b",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
+                    "variant_props": {
+                      "size": "large",
+                      "status": "loading",
+                      "showInfo": "true"
+                    },
+                    "overrides": []
+                  }
+                },
+                {
+                  "id": "7:5",
+                  "name": "技能-TypeScript",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 96, "width": 90, "height": 18 },
+                  "text_content": "TypeScript",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Regular",
+                    "font_size": 12,
+                    "color": "#595959FF",
+                    "letter_spacing": 0,
+                    "line_height": 18,
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "7:6",
+                  "name": "进度条-TypeScript",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 116, "y": 90, "width": 226, "height": 28 },
+                  "instance": {
+                    "symbol_id": "4854:136979",
+                    "variant_key": "b8fdf3ff77753d2b679ebe3ee0047d40d8633146",
+                    "component_set_key": "11120b95d1ad0ffa9b21e2a62cb761880e04f47b",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
+                    "variant_props": {
+                      "size": "large",
+                      "status": "success",
+                      "showInfo": "true"
+                    },
+                    "overrides": []
+                  }
+                },
+                {
+                  "id": "7:7",
+                  "name": "技能-React",
+                  "type": "text",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 16, "y": 140, "width": 90, "height": 18 },
+                  "text_content": "React / Vue",
+                  "text_style": {
+                    "font_family": "PingFang SC",
+                    "font_style": "Regular",
+                    "font_size": 12,
+                    "color": "#595959FF",
+                    "letter_spacing": 0,
+                    "line_height": 18,
+                    "align_h": "left",
+                    "align_v": "center"
+                  }
+                },
+                {
+                  "id": "7:8",
+                  "name": "进度条-React",
+                  "type": "instance",
+                  "visible": true,
+                  "opacity": 1,
+                  "blend_mode": "normal",
+                  "box": { "x": 116, "y": 134, "width": 226, "height": 28 },
+                  "instance": {
+                    "symbol_id": "4854:136979",
+                    "variant_key": "b8fdf3ff77753d2b679ebe3ee0047d40d8633146",
+                    "component_set_key": "11120b95d1ad0ffa9b21e2a62cb761880e04f47b",
+                    "component_set_resolved": true,
+                    "path": "ict-ui/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
+                    "variant_props": {
+                      "size": "large",
+                      "status": "success",
+                      "showInfo": "true"
+                    },
+                    "overrides": []
+                  }
+                }
+              ]
+            },
+
+            {
+              "id": "8:1",
+              "name": "联系我按钮",
+              "type": "instance",
+              "visible": true,
+              "opacity": 1,
+              "blend_mode": "normal",
+              "box": { "x": 95, "y": 732, "width": 200, "height": 44 },
+              "instance": {
+                "symbol_id": "4280:102987",
+                "variant_key": "7f599a2db9d8ac901cf4c858825d1e04221d3021",
+                "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+                "component_set_resolved": true,
+                "path": "ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                "variant_props": {
+                  "status": "primary",
+                  "Interaction": "default",
+                  "size": "large",
+                  "disabled": "false"
+                },
+                "overrides": []
+              }
+            }
+
+          ]
+        }
+      ]
+    }
+  ]
+}

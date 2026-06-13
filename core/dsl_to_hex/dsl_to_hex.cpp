@@ -116,6 +116,18 @@ static void verifyPix(const std::vector<uint8_t> &pixData) {
                 }
             }
         }
+
+        if (n.pluginData()) {
+            auto *pd = n.pluginData();
+            for (uint32_t pi = 0; pi < pd->size(); pi++) {
+                const PluginData &pdi = (*pd)[pi];
+                printf("       pluginData[%u] pluginID=\"%s\" key=\"%s\" value=\"%s\"\n",
+                       pi,
+                       pdi.pluginID() ? pdi.pluginID()->c_str() : "",
+                       pdi.key()      ? pdi.key()->c_str()      : "",
+                       pdi.value()    ? pdi.value()->c_str()    : "");
+            }
+        }
     }
 }
 
@@ -124,14 +136,31 @@ static void verifyPix(const std::vector<uint8_t> &pixData) {
 // =============================================================================
 
 int main(int argc, char **argv) {
+    // ── 预处理：提取 --table-template 参数 ──────────────────────────────────
+    std::string tableTemplatePath;
+    std::vector<const char*> filteredArgv;
+    filteredArgv.push_back(argv[0]);
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--table-template") == 0 && i + 1 < argc) {
+            tableTemplatePath = argv[++i];
+        } else {
+            filteredArgv.push_back(argv[i]);
+        }
+    }
+    int filteredArgc = (int)filteredArgv.size();
+    // 后续逻辑改用 filteredArgc / filteredArgv.data()
+    argc = filteredArgc;
+    argv = const_cast<char**>(filteredArgv.data());
+
     if (argc < 3) {
         fprintf(stderr,
             "Usage:\n"
-            "  %s <dsl.json> <out.txt>                      # 无实例\n"
-            "  %s <dsl.json> <out.txt> <component_dir>      # 目录模式：按 component_set_key 自动查找\n"
-            "  %s <dsl.json> <out.txt> comp1.txt comp2.txt  # 文件模式：逐个指定组件集 hex\n\n"
+            "  %s <dsl.json> <out.txt>                                    # 无实例\n"
+            "  %s <dsl.json> <out.txt> <component_dir>                    # 目录模式\n"
+            "  %s <dsl.json> <out.txt> comp1.txt comp2.txt                # 文件模式\n"
+            "  任意模式均可附加: --table-template <表格模版.hex>           # 启用表格支持\n\n"
             "Example:\n"
-            "  %s ../dsl-instance-demo.json instance_out.txt ../pix-split/harmony_out/component\n",
+            "  %s dsl.json out.txt comp_dir --table-template 表格模版.hex\n",
             argv[0], argv[0], argv[0], argv[0]);
         return 1;
     }
@@ -208,10 +237,20 @@ int main(int argc, char **argv) {
             }
         }
     }
-    printf("  预期总节点数（GUID去重，跳过CANVAS）: %u\n\n", countTotal(doc, compNodeCount));
+    // ── 加载表格模版（可选）────────────────────────────────────────────────────
+    std::unique_ptr<TableTemplate> tmpl;
+    if (!tableTemplatePath.empty()) {
+        tmpl = std::make_unique<TableTemplate>();
+        if (!loadTableTemplate(tableTemplatePath.c_str(), *tmpl)) {
+            fprintf(stderr, "  [WARN] 表格模版加载失败，table 节点将被跳过\n");
+            tmpl.reset();
+        }
+    }
+
+    printf("  预期总节点数（GUID去重，跳过CANVAS）: %u\n\n", countTotal(doc, compNodeCount, tmpl.get()));
 
     kiwi::MemoryPool pool;
-    auto kiwiBin = buildMsg(pool, doc, compSets);
+    auto kiwiBin = buildMsg(pool, doc, compSets, tmpl.get());
     if (kiwiBin.empty()) return 1;
     printf("  kiwi 编码大小: %zu bytes\n", kiwiBin.size());
 

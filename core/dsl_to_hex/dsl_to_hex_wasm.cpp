@@ -16,11 +16,13 @@
 // WASM 导出函数
 // =============================================================================
 
-// dslToHex(dslJsonPath, componentDir) → hex string（或含 missing 的 JSON）
-// - dslJsonPath:  DSL JSON 文件的绝对/相对路径
-// - componentDir: 组件 hex 目录路径（按 component_set_key 自动查找 {key}.txt）
+// dslToHex(dslJsonPath, componentDir, tableTemplatePath) → hex string（或含 missing 的 JSON）
+// - dslJsonPath:       DSL JSON 文件的绝对/相对路径
+// - componentDir:      组件 hex 目录路径（按 component_set_key 自动查找 {key}.txt）
+// - tableTemplatePath: 表格模版 hex 文件路径（空字符串表示不使用表格功能）
 std::string dslToHex(const std::string &dslJsonPath,
-                     const std::string &componentDir) {
+                     const std::string &componentDir,
+                     const std::string &tableTemplatePath) {
     auto raw = readFile(dslJsonPath.c_str());
     if (raw.empty())
         return "{\"error\":\"cannot read DSL: " + dslJsonPath + "\"}";
@@ -31,7 +33,6 @@ std::string dslToHex(const std::string &dslJsonPath,
 
     DslDoc doc = parseDoc(root);
 
-    // 从 DSL 收集所有 component_set_key，按目录查找对应 .txt
     std::vector<std::unique_ptr<CompSetData>> compSets;
     std::string dir = componentDir;
     if (!dir.empty() && dir.back() != '/') dir += '/';
@@ -53,8 +54,16 @@ std::string dslToHex(const std::string &dslJsonPath,
         }
     }
 
+    // 加载表格模版（可选）
+    std::unique_ptr<TableTemplate> tmpl;
+    if (!tableTemplatePath.empty()) {
+        tmpl = std::make_unique<TableTemplate>();
+        if (!loadTableTemplate(tableTemplatePath.c_str(), *tmpl))
+            tmpl.reset();
+    }
+
     kiwi::MemoryPool pool;
-    auto kiwiBin = buildMsg(pool, doc, compSets);
+    auto kiwiBin = buildMsg(pool, doc, compSets, tmpl.get());
     if (kiwiBin.empty()) return "{\"error\":\"buildMsg failed\"}";
 
     auto pixData = compressToPix(kiwiBin);
@@ -62,7 +71,6 @@ std::string dslToHex(const std::string &dslJsonPath,
 
     std::string hexStr = "<!-- pixso binary data -->\n" + bytesToHex(pixData);
 
-    // 有缺失组件时返回 JSON（含 hex + missing 列表），否则直接返回 hex 字符串
     if (!missingKeys.empty()) {
         std::string escapedHex;
         for (char c : hexStr) {

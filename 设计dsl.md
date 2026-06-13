@@ -200,6 +200,69 @@ Fill 和 Stroke 共享相同的字段结构。
 | `boolean` | 布尔运算组合（BOOLEAN_OPERATION）|
 | `text` | 文本 |
 | `instance` | 云端组件实例（INSTANCE）|
+| `table` | 表格（需配合表格模版 hex 使用）|
+
+---
+
+## TableLayer（表格图层）
+
+`type` 为 `"table"` 时，图层包含一个 `table` 字段描述表格结构。表格的视觉样式（边框、背景色、字体等）由外部传入的表格模版 hex 决定，DSL 只负责描述数据和尺寸。
+
+### table 字段
+
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `col_width` | number | 否 | 每列宽度（px）。为 `0` 时自动按 `box.width / 列数` 均分 |
+| `row_height` | number | 否 | 数据行高（px）。为 `0` 时沿用模版默认值 |
+| `header_height` | number | 否 | 表头行高（px）。为 `0` 时沿用模版默认值 |
+| `headers` | string[] | 是 | 列头文字列表，长度决定列数 |
+| `rows` | Layer[][] | 是 | 数据行列表，每行是一个 `Layer` 数组（每格一个完整图层，支持 text / frame / instance 等任意类型）|
+
+### 尺寸优先级
+
+```
+col_width > 0          → 使用 DSL 指定值
+col_width = 0          → box.width / 列数（自动均分）
+box.width 也为 0       → 使用模版默认列宽
+```
+
+`row_height` 和 `header_height` 同理，无法从 `box.height` 自动推算（因为行数不固定），为 `0` 时直接使用模版默认值。
+
+### 约束
+
+- 表格图层**不含 `children` 字段**，单元格内容通过 `rows` 传入
+- 每格（cell）是一个完整的 `Layer`，其 `id` 字段作为该节点的 GUID 写入 hex
+- 表格视觉风格完全由 `--table-template` 指定的 hex 文件控制；若未传入模版，表格节点将被替换为一个不可见的占位 FRAME
+
+### 示例
+
+```json
+{
+  "id": "7:1",
+  "name": "价格表格",
+  "type": "table",
+  "visible": true,
+  "opacity": 1,
+  "blend_mode": "normal",
+  "box": { "x": 40, "y": 200, "width": 1120, "height": 322 },
+  "table": {
+    "col_width": 0,
+    "row_height": 0,
+    "header_height": 0,
+    "headers": ["品牌", "型号", "售价", "库存"],
+    "rows": [
+      [
+        { "id": "10:1", "name": "cell-1-1", "type": "text", "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 280, "height": 33 },
+          "text_content": "Apple", "text_style": { "font_family": "PingFang SC", "font_style": "Regular", "font_size": 14, "color": "#1E293BFF" } },
+        { "id": "10:2", "name": "cell-1-2", "type": "text", "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 280, "height": 33 },
+          "text_content": "iPhone 15 Pro", "text_style": { "font_family": "PingFang SC", "font_style": "Regular", "font_size": 14, "color": "#1E293BFF" } }
+      ]
+    ]
+  }
+}
+```
 
 ---
 

@@ -474,18 +474,24 @@ async function selectVariantsTogether(entry, items, anchorNote = '') {
 function toMatchResult(entry, picked) {
   if (!entry || !picked) return null;
   const { variantKey, reason } = picked;
-  const variant = (entry.variants || []).find(v => v.variantKey === variantKey || v.guid === variantKey);
+  const variants = entry.variants || [];
+  const variant = variants.find(v => v.variantKey === variantKey || v.guid === variantKey);
+  const componentKey = entry.componentKey || entry.guid;
+
+  const resultVariant = variant
+    ? { name: variant.name, variantKey: variant.variantKey || variant.guid, guid: variant.guid }
+    : (variants.length === 0
+      ? { name: '(standalone)', variantKey: componentKey, guid: componentKey }
+      : null);
 
   return {
     source:           entry.source,
     sourceLabel:      entry.sourceLabel,
     componentSetName: entry.name,
-    componentKey:     entry.componentKey || entry.guid,
+    componentKey:     componentKey,
     hexFile:          entry.hexFile,
     path:             entry.source && entry.hexFile ? `${entry.source}/${entry.hexFile}` : null,
-    variant:          variant
-      ? { name: variant.name, variantKey: variant.variantKey || variant.guid, guid: variant.guid }
-      : null,
+    variant:          resultVariant,
     reason:           reason || '',
   };
 }

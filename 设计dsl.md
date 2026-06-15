@@ -247,28 +247,100 @@ box.width 也为 0       → 使用模版默认列宽
 
 ### 示例
 
+表头为「应用名称 / 状态图标 / 版本号 / 操作」，第一行数据演示三种单元格类型：纯文本、图标 instance、带图标的 frame 组合。
+
 ```json
 {
   "id": "7:1",
-  "name": "价格表格",
+  "name": "应用列表表格",
   "type": "table",
   "visible": true,
   "opacity": 1,
   "blend_mode": "normal",
-  "box": { "x": 40, "y": 200, "width": 1120, "height": 322 },
+  "box": { "x": 40, "y": 200, "width": 960, "height": 280 },
   "table": {
     "col_width": 0,
-    "row_height": 0,
-    "header_height": 0,
-    "headers": ["品牌", "型号", "售价", "库存"],
+    "row_height": 48,
+    "header_height": 48,
+    "headers": ["应用名称", "状态", "版本号", "操作"],
     "rows": [
       [
-        { "id": "10:1", "name": "cell-1-1", "type": "text", "visible": true, "opacity": 1, "blend_mode": "normal",
-          "box": { "x": 0, "y": 0, "width": 280, "height": 33 },
-          "text_content": "Apple", "text_style": { "font_family": "PingFang SC", "font_style": "Regular", "font_size": 14, "color": "#1E293BFF" } },
-        { "id": "10:2", "name": "cell-1-2", "type": "text", "visible": true, "opacity": 1, "blend_mode": "normal",
-          "box": { "x": 0, "y": 0, "width": 280, "height": 33 },
-          "text_content": "iPhone 15 Pro", "text_style": { "font_family": "PingFang SC", "font_style": "Regular", "font_size": 14, "color": "#1E293BFF" } }
+        {
+          "id": "10:1", "name": "cell-1-name", "type": "text",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "text_content": "设计协作平台",
+          "text_style": {
+            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_size": 14, "color": "#1E293BFF",
+            "letter_spacing": 0, "line_height": 48,
+            "align_h": "left", "align_v": "center"
+          }
+        },
+        {
+          "id": "10:2", "name": "cell-1-status", "type": "instance",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "instance": {
+            "symbol_id": "4718:41109",
+            "variant_key": "3c14e47dd7957399dd4b4264a5bcc15785468009",
+            "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
+            "component_set_resolved": true,
+            "path": "ICT_UI/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+            "variant_props": { "_color": "success绿色", "size": "normal" },
+            "overrides": []
+          }
+        },
+        {
+          "id": "10:3", "name": "cell-1-version", "type": "text",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "text_content": "v2.4.1",
+          "text_style": {
+            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_size": 14, "color": "#595959FF",
+            "letter_spacing": 0, "line_height": 48,
+            "align_h": "left", "align_v": "center"
+          }
+        },
+        {
+          "id": "10:4", "name": "cell-1-action", "type": "frame",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "auto_layout": {
+            "direction": "horizontal", "gap": 8,
+            "padding": [10, 0, 10, 0],
+            "align_items": "center", "justify_content": "min", "wrap": false
+          },
+          "children": [
+            {
+              "id": "10:5", "name": "action-edit-icon", "type": "instance",
+              "visible": true, "opacity": 1, "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 24, "height": 24 },
+              "instance": {
+                "symbol_id": "4280:102991",
+                "variant_key": "1db35593ea9d14e17bb6b886364e66f9dd82fabc",
+                "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+                "component_set_resolved": true,
+                "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                "variant_props": { "status": "primary", "size": "small", "disabled": "false" },
+                "overrides": []
+              }
+            },
+            {
+              "id": "10:6", "name": "action-edit-label", "type": "text",
+              "visible": true, "opacity": 1, "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 28, "height": 24 },
+              "text_content": "编辑",
+              "text_style": {
+                "font_family": "PingFang SC", "font_style": "Regular",
+                "font_size": 14, "color": "#1677FFFF",
+                "letter_spacing": 0, "line_height": 24,
+                "align_h": "left", "align_v": "center"
+              }
+            }
+          ]
+        }
       ]
     ]
   }

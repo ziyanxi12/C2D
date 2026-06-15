@@ -226,7 +226,7 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 | `col_width` | number | 否 | 每列宽度（px）。为 `0` 时自动按 `box.width / 列数` 均分 |
 | `row_height` | number | 否 | 数据行高（px）。为 `0` 时沿用模版默认值 |
 | `header_height` | number | 否 | 表头行高（px）。为 `0` 时沿用模版默认值 |
-| `headers` | string[] | 是 | 列头文字列表，长度决定列数 |
+| `headers` | (string \| Layer)[] | 是 | 列头描述列表，长度决定列数。元素为 `string` 时渲染为纯文本；为 `Layer` 时按图层类型渲染（支持 `text` / `frame` / `instance` 等），规则与单元格完全相同 |
 | `rows` | Layer[][] | 是 | 数据行列表，每行是一个 `Layer` 数组（每格一个完整图层，支持 text / frame / instance 等任意类型）|
 
 ### 尺寸优先级
@@ -337,6 +337,168 @@ box.width 也为 0       → 使用模版默认列宽
                 "font_size": 14, "color": "#1677FFFF",
                 "letter_spacing": 0, "line_height": 24,
                 "align_h": "left", "align_v": "center"
+              }
+            }
+          ]
+        }
+      ]
+    ]
+  }
+}
+```
+
+### 示例二：富文本表头 + 富内容单元格
+
+表头最后一列为「设置图标 + 设置文本」组合，第一列为纯文本「状态」；数据行第一列为「小绿圆图标 + 活着文本」，最后一列为「编辑图标 + 复制图标」。
+
+```json
+{
+  "id": "7:2",
+  "name": "服务列表表格",
+  "type": "table",
+  "visible": true,
+  "opacity": 1,
+  "blend_mode": "normal",
+  "box": { "x": 40, "y": 200, "width": 960, "height": 280 },
+  "table": {
+    "col_width": 0,
+    "row_height": 48,
+    "header_height": 48,
+    "headers": [
+      "状态",
+      "服务名称",
+      "版本号",
+      {
+        "id": "20:1", "name": "header-action", "type": "frame",
+        "visible": true, "opacity": 1, "blend_mode": "normal",
+        "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+        "auto_layout": {
+          "direction": "horizontal", "gap": 6,
+          "padding": [0, 0, 0, 16],
+          "align_items": "center", "justify_content": "min", "wrap": false
+        },
+        "children": [
+          {
+            "id": "20:2", "name": "header-setting-icon", "type": "instance",
+            "visible": true, "opacity": 1, "blend_mode": "normal",
+            "box": { "x": 0, "y": 0, "width": 16, "height": 16 },
+            "instance": {
+              "symbol_id": "4280:10001",
+              "variant_key": "aabbcc11223344556677889900aabbcc11223344",
+              "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+              "component_set_resolved": true,
+              "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+              "variant_props": { "name": "setting", "size": "16" },
+              "overrides": []
+            }
+          },
+          {
+            "id": "20:3", "name": "header-setting-label", "type": "text",
+            "visible": true, "opacity": 1, "blend_mode": "normal",
+            "box": { "x": 0, "y": 0, "width": 56, "height": 48 },
+            "text_content": "设置",
+            "text_style": {
+              "font_family": "PingFang SC", "font_style": "Regular",
+              "font_size": 14, "color": "#1E293BFF",
+              "letter_spacing": 0, "line_height": 48,
+              "align_h": "left", "align_v": "center"
+            }
+          }
+        ]
+      }
+    ],
+    "rows": [
+      [
+        {
+          "id": "21:1", "name": "cell-1-status", "type": "frame",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "auto_layout": {
+            "direction": "horizontal", "gap": 6,
+            "padding": [0, 0, 0, 16],
+            "align_items": "center", "justify_content": "min", "wrap": false
+          },
+          "children": [
+            {
+              "id": "21:2", "name": "status-dot", "type": "ellipse",
+              "visible": true, "opacity": 1, "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 8, "height": 8 },
+              "fills": [{ "type": "solid", "visible": true, "opacity": 1, "color": "#52C41AFF" }]
+            },
+            {
+              "id": "21:3", "name": "status-label", "type": "text",
+              "visible": true, "opacity": 1, "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 28, "height": 48 },
+              "text_content": "活着",
+              "text_style": {
+                "font_family": "PingFang SC", "font_style": "Regular",
+                "font_size": 14, "color": "#52C41AFF",
+                "letter_spacing": 0, "line_height": 48,
+                "align_h": "left", "align_v": "center"
+              }
+            }
+          ]
+        },
+        {
+          "id": "21:4", "name": "cell-1-name", "type": "text",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "text_content": "设计协作平台",
+          "text_style": {
+            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_size": 14, "color": "#1E293BFF",
+            "letter_spacing": 0, "line_height": 48,
+            "align_h": "left", "align_v": "center"
+          }
+        },
+        {
+          "id": "21:5", "name": "cell-1-version", "type": "text",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "text_content": "v2.4.1",
+          "text_style": {
+            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_size": 14, "color": "#595959FF",
+            "letter_spacing": 0, "line_height": 48,
+            "align_h": "left", "align_v": "center"
+          }
+        },
+        {
+          "id": "21:6", "name": "cell-1-action", "type": "frame",
+          "visible": true, "opacity": 1, "blend_mode": "normal",
+          "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+          "auto_layout": {
+            "direction": "horizontal", "gap": 16,
+            "padding": [0, 0, 0, 16],
+            "align_items": "center", "justify_content": "min", "wrap": false
+          },
+          "children": [
+            {
+              "id": "21:7", "name": "action-edit-icon", "type": "instance",
+              "visible": true, "opacity": 1, "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 16, "height": 16 },
+              "instance": {
+                "symbol_id": "4280:10002",
+                "variant_key": "1db35593ea9d14e17bb6b886364e66f9dd82fabc",
+                "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+                "component_set_resolved": true,
+                "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                "variant_props": { "name": "edit", "size": "16" },
+                "overrides": []
+              }
+            },
+            {
+              "id": "21:8", "name": "action-copy-icon", "type": "instance",
+              "visible": true, "opacity": 1, "blend_mode": "normal",
+              "box": { "x": 0, "y": 0, "width": 16, "height": 16 },
+              "instance": {
+                "symbol_id": "4280:10003",
+                "variant_key": "cc9d14e47dd7957399dd4b4264a5bcc157854680",
+                "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
+                "component_set_resolved": true,
+                "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                "variant_props": { "name": "copy", "size": "16" },
+                "overrides": []
               }
             }
           ]

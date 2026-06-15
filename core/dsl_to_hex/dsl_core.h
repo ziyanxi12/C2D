@@ -108,13 +108,20 @@ struct TableTemplate {
     PixsoMsg         msg;
 
     // 模版中的关键节点指针（指向 pool 内存，生命周期与 TableTemplate 一致）
-    const PixsoNode *tmplRoot   = nullptr;  // "表格"（根 FRAME）
-    const PixsoNode *tmplTable  = nullptr;  // "$Table"
-    const PixsoNode *tmplColumn = nullptr;  // ".$Table-Column"
-    const PixsoNode *tmplHeader = nullptr;  // ".$Table-Col-Header"
-    const PixsoNode *tmplBody   = nullptr;  // ".$Table-Col-Body"
-    const PixsoNode *tmplCell   = nullptr;  // ".$Table-Cell"
-    const PixsoNode *tmplRect   = nullptr;  // 分隔矩形（第二子节点）
+    const PixsoNode *tmplRoot      = nullptr;  // "表格"（根 FRAME）
+    const PixsoNode *tmplTable     = nullptr;  // "$Table"
+    const PixsoNode *tmplTableBody = nullptr;  // ".$Table-Body"（数据列容器，新模版）
+    const PixsoNode *tmplColumn    = nullptr;  // ".$Table-Column"（数据列模板）
+    const PixsoNode *tmplHeader    = nullptr;  // ".$Table-Col-Header"（数据列下）
+    const PixsoNode *tmplBody      = nullptr;  // ".$Table-Col-Body"（数据列下）
+    const PixsoNode *tmplCell      = nullptr;  // ".$Table-Cell"
+    const PixsoNode *tmplRect      = nullptr;  // 分隔矩形（第二子节点）
+
+    // 多选框列节点（新模版）
+    const PixsoNode *tmplCbColumn  = nullptr;  // ".$Table-Column"（多选框列）
+    const PixsoNode *tmplCbHeader  = nullptr;  // ".$Table-Col-Header"（多选框列下）
+    const PixsoNode *tmplCbBody    = nullptr;  // ".$Table-Col-Body"（多选框列下，每行模板）
+    float cbColWidth = 48.f;
 
     // tmplHeader 的直接子节点（按模版 kiwi 数组顺序）：
     //   TEXT  → 替换为 DSL 列头文字
@@ -130,6 +137,9 @@ struct TableTemplate {
     // 需要原样输出到隐藏页 {0,2}，使 Paging 等 INSTANCE 引用的 SYMBOL 能正确渲染。
     std::vector<const PixsoNode *> libraryNodes;
 
+    // parent→children 映射，保留供 fillTableNode 递归克隆多选框子树使用
+    std::map<std::string, std::vector<const PixsoNode*>> tmplPmap;
+
     // 从模版提取的默认尺寸
     float colWidth     = 409.f;
     float rowHeight    = 43.f;
@@ -139,6 +149,8 @@ struct TableTemplate {
         return tmplRoot && tmplTable && tmplColumn &&
                tmplHeader && tmplBody && tmplCell && tmplRect;
     }
+    bool hasCheckbox() const { return tmplCbColumn && tmplCbHeader && tmplCbBody; }
+    bool hasTableBody() const { return tmplTableBody != nullptr; }
 };
 
 static bool loadCompSet(const char *path, CompSetData &cs) {
@@ -352,11 +364,13 @@ struct DslAutoLayout {
 struct DslLayer;
 
 struct DslTableData {
-    std::vector<std::string>            headers;
+    // 列头：type 为空时表示纯文本（textContent 存字符串），否则为富类型 Layer
+    std::vector<DslLayer>               headers;
     std::vector<std::vector<DslLayer>>  rows;     // 每格是完整 DslLayer
     float colWidth     = 0.f;  // 0 = 用模版默认值
     float rowHeight    = 0.f;
     float headerHeight = 0.f;
+    bool  showCheckbox = false;  // 是否显示多选框列（默认不显示）
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -511,12 +525,24 @@ static DslLayer parseLayer(const JVal &j) {
     }
     if (l.type == "table" && j.has("table")) {
         const JVal &t = j.get("table");
-        if (t.has("col_width"))     l.tableData.colWidth     = t.get("col_width").asFloat();
-        if (t.has("row_height"))    l.tableData.rowHeight    = t.get("row_height").asFloat();
-        if (t.has("header_height")) l.tableData.headerHeight = t.get("header_height").asFloat();
+        if (t.has("col_width"))      l.tableData.colWidth     = t.get("col_width").asFloat();
+        if (t.has("row_height"))     l.tableData.rowHeight    = t.get("row_height").asFloat();
+        if (t.has("header_height"))  l.tableData.headerHeight = t.get("header_height").asFloat();
+        if (t.has("show_checkbox"))  l.tableData.showCheckbox = t.get("show_checkbox").asBool();
         if (t.has("headers")) {
-            for (size_t i = 0; i < t.get("headers").size(); i++)
-                l.tableData.headers.push_back(t.get("headers")[i].asStr());
+            const JVal &hdrs = t.get("headers");
+            for (size_t i = 0; i < hdrs.size(); i++) {
+                const JVal &h = hdrs[i];
+                if (h.type == JVal::Str) {
+                    // 纯文本列头：构造 type=="" 的合成 Layer，textContent 存列头字符串
+                    DslLayer hdr;
+                    hdr.textContent = h.asStr();
+                    l.tableData.headers.push_back(std::move(hdr));
+                } else {
+                    // 富类型列头：按 Layer 解析
+                    l.tableData.headers.push_back(parseLayer(h));
+                }
+            }
         }
         if (t.has("rows")) {
             const JVal &rows = t.get("rows");
@@ -673,6 +699,11 @@ static Color* parseColor(kiwi::MemoryPool &pool, const std::string &hex) {
     return c;
 }
 
+using TmplPmap = std::map<std::string, std::vector<const PixsoNode*>>;
+
+// 统计模板节点子树的节点总数（含自身）—— 前向声明，实现在 cloneStructNode 之后
+static uint32_t countTmplSubtree(const PixsoNode *node, const TmplPmap &pmap);
+
 // =============================================================================
 // 节点数量统计
 // =============================================================================
@@ -686,12 +717,35 @@ static uint32_t countLayerNodes(const DslLayer &layer, const TableTemplate *tmpl
         int nRows = (int)layer.tableData.rows.size();
         // root("表格") + $Table + 矩形分隔
         uint32_t n = 3;
-        // 每列：$Table-Column + $Table-Col-Header + header子节点 + $Table-Col-Body
-        uint32_t hdrChildCnt = (uint32_t)tmpl->tmplHdrChildren.size();
-        n += (uint32_t)nCols * (3u + hdrChildCnt);
-        // 每格：$Table-Cell + cell 子节点（模版 RECT 原样 + 模版 TEXT 替换内容）
+        // .$Table-Body 容器（新模版）
+        if (tmpl->hasTableBody()) n += 1;
+        // 多选框列：显示时 = 完整子树，隐藏时 = 仅列节点本身（visible=false）
+        if (tmpl->hasCheckbox()) {
+            n += 1;  // .$Table-Column (checkbox)
+            if (layer.tableData.showCheckbox) {
+                n += countTmplSubtree(tmpl->tmplCbHeader, tmpl->tmplPmap);
+                n += (uint32_t)nRows * countTmplSubtree(tmpl->tmplCbBody, tmpl->tmplPmap);
+            }
+        }
+        uint32_t hdrChildCnt  = (uint32_t)tmpl->tmplHdrChildren.size();
         uint32_t cellChildCnt = (uint32_t)tmpl->tmplCellChildren.size();
-        n += (uint32_t)nCols * (uint32_t)nRows * (1u + cellChildCnt);
+        for (int ci = 0; ci < nCols; ci++) {
+            // $Table-Column + $Table-Col-Header + $Table-Col-Body
+            n += 3;
+            // 列头：type 为空 → 模版子节点；否则 → 富类型 Layer 节点树
+            const DslLayer &hdr = layer.tableData.headers[ci];
+            n += hdr.type.empty() ? hdrChildCnt : countLayerNodes(hdr, tmpl);
+            // 每行格：$Table-Cell + 内容
+            for (int ri = 0; ri < nRows; ri++) {
+                n += 1;  // $Table-Cell
+                const DslLayer *cell = (ri < nRows &&
+                                        ci < (int)layer.tableData.rows[ri].size())
+                                       ? &layer.tableData.rows[ri][ci] : nullptr;
+                // type 为空或 "text" → 模版子节点；否则 → 富类型 Layer 节点树
+                bool richCell = cell && !cell->type.empty() && cell->type != "text";
+                n += richCell ? countLayerNodes(*cell, tmpl) : cellChildCnt;
+            }
+        }
         return n;
     }
     uint32_t n = 1;
@@ -897,25 +951,24 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
     auto *nodes = tmpl.msg.pixsoNodes();
     if (!nodes) return false;
 
-    // parent→children 映射，用于查找 TEXT 子节点
-    std::map<std::string, std::vector<const PixsoNode*>> pmap;
+    // parent→children 映射（存入 tmpl，供 fillTableNode 递归克隆用）
     for (uint32_t i = 0; i < nodes->size(); i++) {
         const PixsoNode &n = (*nodes)[i];
         if (!n.parentIndex() || !n.parentIndex()->guid()) continue;
         uint32_t ps = n.parentIndex()->guid()->sessionID() ? *n.parentIndex()->guid()->sessionID() : 0;
         uint32_t pl = n.parentIndex()->guid()->localID()   ? *n.parentIndex()->guid()->localID()   : 0;
-        pmap[gkStr(ps, pl)].push_back(&n);
+        tmpl.tmplPmap[gkStr(ps, pl)].push_back(&n);
     }
 
-    // 按 name 找关键节点
+    // 按 name 找关键节点（.$Table-Column 可能有两个，收集候选后再区分）
+    std::vector<const PixsoNode*> columnCandidates;
     for (uint32_t i = 0; i < nodes->size(); i++) {
         const PixsoNode &n = (*nodes)[i];
         const char *nm = n.name() ? n.name()->c_str() : "";
-        if      (strcmp(nm, "$Table") == 0)             tmpl.tmplTable  = &n;
-        else if (strcmp(nm, ".$Table-Column") == 0)     tmpl.tmplColumn = &n;
-        else if (strcmp(nm, ".$Table-Col-Header") == 0) tmpl.tmplHeader = &n;
-        else if (strcmp(nm, ".$Table-Col-Body") == 0)   tmpl.tmplBody   = &n;
-        else if (strcmp(nm, ".$Table-Cell") == 0)       tmpl.tmplCell   = &n;
+        if      (strcmp(nm, ".$Table") == 0)          tmpl.tmplTable     = &n;
+        else if (strcmp(nm, ".$Table-Column") == 0)  columnCandidates.push_back(&n);
+        else if (strcmp(nm, ".$Table-Body") == 0)    tmpl.tmplTableBody = &n;
+        else if (strcmp(nm, ".$Table-Cell") == 0)    tmpl.tmplCell      = &n;
         else if (n.type() && *n.type() == NodeType::FRAME
                  && n.parentIndex() && n.parentIndex()->guid()) {
             // 根 FRAME：父节点是 CANVAS
@@ -933,42 +986,92 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
         }
     }
 
-    // tmplRect：tmplRoot 的直接子节点中，不是 $Table 的那个（类型不限）
+    // ── 区分两个 .$Table-Column：有 .$Table-Cell 后代 → 数据列；否则 → 多选框列 ──
+    {
+        auto hasCellDesc = [&](const PixsoNode *col) -> bool {
+            std::queue<std::string> q;
+            if (!col->guid()) return false;
+            uint32_t s = col->guid()->sessionID() ? *col->guid()->sessionID() : 0;
+            uint32_t l = col->guid()->localID()   ? *col->guid()->localID()   : 0;
+            q.push(gkStr(s, l));
+            while (!q.empty()) {
+                std::string k = q.front(); q.pop();
+                auto it = tmpl.tmplPmap.find(k);
+                if (it == tmpl.tmplPmap.end()) continue;
+                for (const PixsoNode *ch : it->second) {
+                    const char *cnm = ch->name() ? ch->name()->c_str() : "";
+                    if (strcmp(cnm, ".$Table-Cell") == 0) return true;
+                    if (ch->guid()) {
+                        uint32_t cs = ch->guid()->sessionID() ? *ch->guid()->sessionID() : 0;
+                        uint32_t cl = ch->guid()->localID()   ? *ch->guid()->localID()   : 0;
+                        q.push(gkStr(cs, cl));
+                    }
+                }
+            }
+            return false;
+        };
+        for (const PixsoNode *col : columnCandidates) {
+            if (hasCellDesc(col)) tmpl.tmplColumn   = col;
+            else                  tmpl.tmplCbColumn = col;
+        }
+    }
+
+    // ── 从亲子关系派生 header/body（比全局名字扫描更可靠，新旧模版均适用）──
+    auto getChildrenOf = [&](const PixsoNode *n) -> const std::vector<const PixsoNode*>* {
+        if (!n || !n->guid()) return nullptr;
+        uint32_t s = n->guid()->sessionID() ? *n->guid()->sessionID() : 0;
+        uint32_t l = n->guid()->localID()   ? *n->guid()->localID()   : 0;
+        auto it = tmpl.tmplPmap.find(gkStr(s, l));
+        return (it != tmpl.tmplPmap.end()) ? &it->second : nullptr;
+    };
+
+    // 数据列的直接子节点 → tmplHeader / tmplBody
+    if (auto *ch = getChildrenOf(tmpl.tmplColumn)) {
+        for (const PixsoNode *c : *ch) {
+            const char *nm = c->name() ? c->name()->c_str() : "";
+            if      (strcmp(nm, ".$Table-Col-Header") == 0) tmpl.tmplHeader = c;
+            else if (strcmp(nm, ".$Table-Col-Body") == 0)   tmpl.tmplBody   = c;
+        }
+    }
+    // 多选框列的直接子节点 → tmplCbHeader / tmplCbBody
+    if (auto *ch = getChildrenOf(tmpl.tmplCbColumn)) {
+        for (const PixsoNode *c : *ch) {
+            const char *nm = c->name() ? c->name()->c_str() : "";
+            if      (strcmp(nm, ".$Table-Col-Header") == 0) tmpl.tmplCbHeader = c;
+            else if (strcmp(nm, ".$Table-Col-Body") == 0)   tmpl.tmplCbBody   = c;
+        }
+    }
+
+    // tmplRect：tmplRoot 的直接子节点中，不是 $Table 的那个
     if (tmpl.tmplRoot && tmpl.tmplTable) {
-        uint32_t rootS = tmpl.tmplRoot->guid()->sessionID() ? *tmpl.tmplRoot->guid()->sessionID() : 0;
-        uint32_t rootL = tmpl.tmplRoot->guid()->localID()   ? *tmpl.tmplRoot->guid()->localID()   : 0;
+        uint32_t rootS  = tmpl.tmplRoot->guid()->sessionID()  ? *tmpl.tmplRoot->guid()->sessionID()  : 0;
+        uint32_t rootL  = tmpl.tmplRoot->guid()->localID()    ? *tmpl.tmplRoot->guid()->localID()    : 0;
         uint32_t tableS = tmpl.tmplTable->guid()->sessionID() ? *tmpl.tmplTable->guid()->sessionID() : 0;
         uint32_t tableL = tmpl.tmplTable->guid()->localID()   ? *tmpl.tmplTable->guid()->localID()   : 0;
-        auto it = pmap.find(gkStr(rootS, rootL));
-        if (it != pmap.end()) {
+        auto it = tmpl.tmplPmap.find(gkStr(rootS, rootL));
+        if (it != tmpl.tmplPmap.end()) {
             for (const PixsoNode *child : it->second) {
                 if (!child->guid()) continue;
                 uint32_t cs = child->guid()->sessionID() ? *child->guid()->sessionID() : 0;
                 uint32_t cl = child->guid()->localID()   ? *child->guid()->localID()   : 0;
-                if (cs == tableS && cl == tableL) continue;  // 跳过 $Table
+                if (cs == tableS && cl == tableL) continue;
                 tmpl.tmplRect = child;
                 break;
             }
         }
     }
 
-    // 收集 tmplHeader 的直接子节点（按 kiwi 数组顺序）
-    if (tmpl.tmplHeader && tmpl.tmplHeader->guid()) {
-        uint32_t hs = tmpl.tmplHeader->guid()->sessionID() ? *tmpl.tmplHeader->guid()->sessionID() : 0;
-        uint32_t hl = tmpl.tmplHeader->guid()->localID()   ? *tmpl.tmplHeader->guid()->localID()   : 0;
-        auto it = pmap.find(gkStr(hs, hl));
-        if (it != pmap.end())
-            for (auto *c : it->second) tmpl.tmplHdrChildren.push_back(c);
-    }
+    // 收集 tmplHeader 的直接子节点
+    if (auto *ch = getChildrenOf(tmpl.tmplHeader))
+        for (auto *c : *ch) tmpl.tmplHdrChildren.push_back(c);
 
-    // 收集 tmplCell 的直接子节点（按 kiwi 数组顺序）
-    if (tmpl.tmplCell && tmpl.tmplCell->guid()) {
-        uint32_t cs2 = tmpl.tmplCell->guid()->sessionID() ? *tmpl.tmplCell->guid()->sessionID() : 0;
-        uint32_t cl2 = tmpl.tmplCell->guid()->localID()   ? *tmpl.tmplCell->guid()->localID()   : 0;
-        auto it = pmap.find(gkStr(cs2, cl2));
-        if (it != pmap.end())
-            for (auto *c : it->second) tmpl.tmplCellChildren.push_back(c);
-    }
+    // 收集 tmplCell 的直接子节点
+    if (auto *ch = getChildrenOf(tmpl.tmplCell))
+        for (auto *c : *ch) tmpl.tmplCellChildren.push_back(c);
+
+    // 多选框列宽
+    if (tmpl.tmplCbColumn && tmpl.tmplCbColumn->size() && tmpl.tmplCbColumn->size()->x())
+        tmpl.cbColWidth = *tmpl.tmplCbColumn->size()->x();
 
     if (!tmpl.valid()) {
         fprintf(stderr, "  [WARN] 表格模版缺少节点（需要: $Table/$Table-Column/Header/Body/Cell/矩形）\n");
@@ -991,12 +1094,11 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
         enqueue(tmpl.tmplRoot);
         while (!bfsQ.empty()) {
             std::string pk = bfsQ.front(); bfsQ.pop();
-            auto it = pmap.find(pk);
-            if (it != pmap.end())
+            auto it = tmpl.tmplPmap.find(pk);
+            if (it != tmpl.tmplPmap.end())
                 for (const PixsoNode *ch : it->second) enqueue(ch);
         }
 
-        // 其余非 CANVAS、非结构性节点 → library
         for (uint32_t i = 0; i < nodes->size(); i++) {
             const PixsoNode &n = (*nodes)[i];
             if (n.type() && *n.type() == NodeType::CANVAS) continue;
@@ -1018,8 +1120,8 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
     if (tmpl.tmplCell->size() && tmpl.tmplCell->size()->y())
         tmpl.rowHeight = *tmpl.tmplCell->size()->y();
 
-    printf("  表格模版: colWidth=%.0f headerHeight=%.0f rowHeight=%.0f\n",
-           tmpl.colWidth, tmpl.headerHeight, tmpl.rowHeight);
+    printf("  表格模版: colWidth=%.0f headerHeight=%.0f rowHeight=%.0f cbColWidth=%.0f\n",
+           tmpl.colWidth, tmpl.headerHeight, tmpl.rowHeight, tmpl.cbColWidth);
     return true;
 }
 
@@ -1064,6 +1166,51 @@ static void cloneStructNode(
     }
 
     remapBlobsInNode(dst, blobRemap);
+}
+
+// =============================================================================
+// 模版子树递归辅助（多选框列 .$Table-Col-Body 子树的统计和克隆）
+// =============================================================================
+
+static uint32_t countTmplSubtree(const PixsoNode *node, const TmplPmap &pmap) {
+    if (!node) return 0;
+    uint32_t n = 1;
+    if (!node->guid()) return n;
+    uint32_t s = node->guid()->sessionID() ? *node->guid()->sessionID() : 0;
+    uint32_t l = node->guid()->localID()   ? *node->guid()->localID()   : 0;
+    auto it = pmap.find(gkStr(s, l));
+    if (it != pmap.end())
+        for (const PixsoNode *ch : it->second)
+            n += countTmplSubtree(ch, pmap);
+    return n;
+}
+
+static void cloneTmplSubtree(
+    kiwi::MemoryPool        &pool,
+    kiwi::Array<PixsoNode>  &arr,
+    uint32_t                &idx,
+    const PixsoNode         *src,
+    uint32_t                 parentS, uint32_t parentL,
+    int                      pos,
+    const TmplPmap          &pmap,
+    GuidCounter             &gc,
+    const std::map<int32_t,int32_t> &blobRemap,
+    float overX = kNO, float overY = kNO,
+    float overW = kNO, float overH = kNO)
+{
+    if (!src) return;
+    auto [newS, newL] = gc.next();
+    cloneStructNode(pool, arr[idx++], *src, newS, newL,
+                    parentS, parentL, makePos(pos),
+                    overX, overY, overW, overH, blobRemap);
+    if (!src->guid()) return;
+    uint32_t s = src->guid()->sessionID() ? *src->guid()->sessionID() : 0;
+    uint32_t l = src->guid()->localID()   ? *src->guid()->localID()   : 0;
+    auto it = pmap.find(gkStr(s, l));
+    if (it == pmap.end()) return;
+    int ci = 0;
+    for (const PixsoNode *ch : it->second)
+        cloneTmplSubtree(pool, arr, idx, ch, newS, newL, ci++, pmap, gc, blobRemap);
 }
 
 // 前向声明（fillTableNode 调用 fillLayerNode 处理非表格图层）
@@ -1120,7 +1267,13 @@ static void fillTableNode(
     float rectH   = (tmpl.tmplRect->size() && tmpl.tmplRect->size()->y()
                      ? *tmpl.tmplRect->size()->y() : 50.f);
 
-    float tableW  = (float)nCols * colW;
+    bool hasCb  = tmpl.hasCheckbox();
+    bool hasTB  = tmpl.hasTableBody();
+    bool showCb = hasCb && layer.tableData.showCheckbox;
+    // 仅在显示多选框时才占用宽度；隐藏时列节点仍写入但宽度为 0
+    float cbColW = showCb ? tmpl.cbColWidth : 0.f;
+
+    float tableW  = cbColW + (float)nCols * colW;
     float tableH  = colH + rootGap + rectH;
 
     auto nextGuid = [&]() { return gc.next(); };
@@ -1152,11 +1305,106 @@ static void fillTableNode(
                         blobRemap);
     }
 
-    // === 3. 每列 ===
+    // === 3. 多选框列（若模版支持）===
+    if (hasCb) {
+        auto [cbColS, cbColL] = nextGuid();
+        {
+            PixsoNode &n = arr[idx++];
+            cloneStructNode(pool, n, *tmpl.tmplCbColumn,
+                            cbColS, cbColL,
+                            tableNS, tableNL, makePos(0),
+                            0.f, 0.f,
+                            showCb ? tmpl.cbColWidth : 0.f, colH,
+                            blobRemap);
+            n.set_visible(showCb);
+        }
+
+        if (showCb) {
+            // .$Table-Col-Header（高度锁 hdrH）
+            auto [cbHdrS, cbHdrL] = nextGuid();
+            {
+                PixsoNode &n = arr[idx++];
+                cloneStructNode(pool, n, *tmpl.tmplCbHeader,
+                                cbHdrS, cbHdrL,
+                                cbColS, cbColL, makePos(0),
+                                kNO, kNO,
+                                tmpl.cbColWidth, hdrH,
+                                blobRemap);
+                if (n.stackMode()) {
+                    n.set_stackPrimarySizing(StackSize::FIXED);
+                    n.set_stackCounterSizing(StackSize::FIXED);
+                }
+            }
+            // header 子节点（原样递归克隆）
+            {
+                uint32_t cbHdrTmplS = tmpl.tmplCbHeader->guid()->sessionID() ? *tmpl.tmplCbHeader->guid()->sessionID() : 0;
+                uint32_t cbHdrTmplL = tmpl.tmplCbHeader->guid()->localID()   ? *tmpl.tmplCbHeader->guid()->localID()   : 0;
+                auto it = tmpl.tmplPmap.find(gkStr(cbHdrTmplS, cbHdrTmplL));
+                if (it != tmpl.tmplPmap.end()) {
+                    int ci2 = 0;
+                    for (const PixsoNode *ch : it->second)
+                        cloneTmplSubtree(pool, arr, idx, ch, cbHdrS, cbHdrL, ci2++,
+                                         tmpl.tmplPmap, gc, blobRemap);
+                }
+            }
+            // 每行一个 .$Table-Col-Body（高度 = rowH，y 与数据列 cell 对齐）
+            for (int ri = 0; ri < nRows; ri++) {
+                float cbBodyY = hdrH + padTop + (float)ri * (rowH + bodySpacing);
+                auto [cbBodyS, cbBodyL] = nextGuid();
+                {
+                    PixsoNode &n = arr[idx++];
+                    cloneStructNode(pool, n, *tmpl.tmplCbBody,
+                                    cbBodyS, cbBodyL,
+                                    cbColS, cbColL, makePos(ri + 1),
+                                    0.f, cbBodyY,
+                                    tmpl.cbColWidth, rowH,
+                                    blobRemap);
+                    if (n.stackMode()) {
+                        n.set_stackPrimarySizing(StackSize::FIXED);
+                        n.set_stackCounterSizing(StackSize::FIXED);
+                    }
+                }
+                // body 子树（.表格子元素 + INSTANCE）递归克隆
+                {
+                    uint32_t cbBodyTmplS = tmpl.tmplCbBody->guid()->sessionID() ? *tmpl.tmplCbBody->guid()->sessionID() : 0;
+                    uint32_t cbBodyTmplL = tmpl.tmplCbBody->guid()->localID()   ? *tmpl.tmplCbBody->guid()->localID()   : 0;
+                    auto it = tmpl.tmplPmap.find(gkStr(cbBodyTmplS, cbBodyTmplL));
+                    if (it != tmpl.tmplPmap.end()) {
+                        int ki = 0;
+                        for (const PixsoNode *ch : it->second)
+                            cloneTmplSubtree(pool, arr, idx, ch, cbBodyS, cbBodyL, ki++,
+                                             tmpl.tmplPmap, gc, blobRemap);
+                    }
+                }
+            }
+        }
+    }
+
+    // === 4. .$Table-Body 容器（新模版）或直接使用 $Table 作父节点（旧模版）===
+    uint32_t datParentS = tableNS, datParentL = tableNL;
+    int      datParentBasePos = hasCb ? 1 : 0;  // checkbox 列占位 pos=0
+    if (hasTB) {
+        auto [tbS, tbL] = nextGuid();
+        {
+            PixsoNode &n = arr[idx++];
+            cloneStructNode(pool, n, *tmpl.tmplTableBody,
+                            tbS, tbL,
+                            tableNS, tableNL, makePos(datParentBasePos),
+                            cbColW, 0.f,
+                            (float)nCols * colW, colH,
+                            blobRemap);
+        }
+        datParentS   = tbS;
+        datParentL   = tbL;
+        datParentBasePos = 0;  // 数据列在 .$Table-Body 内从 pos=0 开始
+    }
+
+    // === 5. 每列（数据列）===
     for (int ci = 0; ci < nCols; ci++) {
-        float colX = (float)ci * colW;
-        const std::string &hdrText =
-            (ci < (int)layer.tableData.headers.size()) ? layer.tableData.headers[ci] : "";
+        // x 相对于父节点：若有 .$Table-Body 则从 0 起；否则加 cbColW 偏移
+        float colX = hasTB ? (float)ci * colW : (cbColW + (float)ci * colW);
+        const DslLayer &hdrCell = layer.tableData.headers[ci];
+        bool isRichHdr = !hdrCell.type.empty();  // type 非空 → 富类型 Layer
 
         // $Table-Column
         auto [colS, colL] = nextGuid();
@@ -1164,13 +1412,14 @@ static void fillTableNode(
             PixsoNode &n = arr[idx++];
             cloneStructNode(pool, n, *tmpl.tmplColumn,
                             colS, colL,
-                            tableNS, tableNL, makePos(ci),
+                            datParentS, datParentL, makePos(datParentBasePos + ci),
                             colX, 0.f,
                             colW, colH,
                             blobRemap);
         }
 
-        // $Table-Col-Header
+        // $Table-Col-Header：高度强制为 hdrH，并锁定 auto-layout 为 FIXED，
+        // 防止 Pixso 按子节点内容重算高度（RESIZE_TO_FIT 会导致各列高度不一致）
         auto [hdrS, hdrL] = nextGuid();
         {
             PixsoNode &n = arr[idx++];
@@ -1178,38 +1427,60 @@ static void fillTableNode(
                             hdrS, hdrL,
                             colS, colL, makePos(0),
                             kNO, kNO,
-                            colW, kNO,
+                            colW, hdrH,
                             blobRemap);
+            if (n.stackMode()) {
+                n.set_stackPrimarySizing(StackSize::FIXED);
+                n.set_stackCounterSizing(StackSize::FIXED);
+            }
         }
 
-        // Header 子节点（按模版顺序）：TEXT 替换为列头文字，非 TEXT 同步 header 宽高
-        for (int hi = 0; hi < (int)tmpl.tmplHdrChildren.size(); hi++) {
-            const PixsoNode *ch = tmpl.tmplHdrChildren[hi];
-            bool isText = ch->type() && *ch->type() == NodeType::TEXT;
-            auto [cS, cL] = nextGuid();
-            PixsoNode &n = arr[idx++];
-            cloneStructNode(pool, n, *ch, cS, cL,
-                            hdrS, hdrL, makePos(hi),
-                            kNO, kNO,
-                            isText ? kNO : colW,   // 非 TEXT：宽跟随列宽
-                            isText ? kNO : hdrH,   // 非 TEXT：高跟随列头高
-                            blobRemap);
-            // TEXT 节点：替换为 DSL 列头文字
-            if (ch->type() && *ch->type() == NodeType::TEXT && !hdrText.empty()) {
-                TextData *td = pool.allocate<TextData>(); new(td) TextData();
-                td->set_characters(pool.string(hdrText.c_str()));
-                uint32_t cc = 0;
-                const uint8_t *sp = (const uint8_t*)hdrText.c_str();
-                for (size_t bi = 0; bi < hdrText.size(); ) {
-                    uint8_t c = sp[bi];
-                    bi += (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
-                    cc++;
+        if (isRichHdr) {
+            // 富类型表头：把 DSL Layer 整棵树写为 $Table-Col-Header 的子节点，
+            // 强制根节点尺寸 = colW × hdrH，并锁定为 FIXED 防止被 auto-layout 撑开
+            uint32_t richStart = idx;
+            fillLayerNode(pool, arr, idx, hdrCell,
+                          hdrS, hdrL, 0,
+                          symMap, childMaps, gc, &tmpl, &blobRemap);
+            if (idx > richStart) {
+                Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
+                sz->set_x(colW); sz->set_y(hdrH);
+                arr[richStart].set_size(sz);
+                if (arr[richStart].stackMode()) {
+                    arr[richStart].set_stackPrimarySizing(StackSize::FIXED);
+                    arr[richStart].set_stackCounterSizing(StackSize::FIXED);
                 }
-                if (cc > 0) {
-                    auto &ids = td->set_characterStyleIDs(pool, cc);
-                    for (uint32_t j = 0; j < cc; j++) ids[j] = 0;
+            }
+        } else {
+            // 纯文本表头：按模版子节点顺序渲染，TEXT 节点替换为 DSL 列头字符串
+            const std::string &hdrText = hdrCell.textContent;
+            for (int hi = 0; hi < (int)tmpl.tmplHdrChildren.size(); hi++) {
+                const PixsoNode *ch = tmpl.tmplHdrChildren[hi];
+                bool isText = ch->type() && *ch->type() == NodeType::TEXT;
+                auto [cS, cL] = nextGuid();
+                PixsoNode &n = arr[idx++];
+                cloneStructNode(pool, n, *ch, cS, cL,
+                                hdrS, hdrL, makePos(hi),
+                                kNO, kNO,
+                                isText ? kNO : colW,   // 非 TEXT：宽跟随列宽
+                                isText ? kNO : hdrH,   // 非 TEXT：高跟随列头高
+                                blobRemap);
+                if (ch->type() && *ch->type() == NodeType::TEXT && !hdrText.empty()) {
+                    TextData *td = pool.allocate<TextData>(); new(td) TextData();
+                    td->set_characters(pool.string(hdrText.c_str()));
+                    uint32_t cc = 0;
+                    const uint8_t *sp = (const uint8_t*)hdrText.c_str();
+                    for (size_t bi = 0; bi < hdrText.size(); ) {
+                        uint8_t c = sp[bi];
+                        bi += (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
+                        cc++;
+                    }
+                    if (cc > 0) {
+                        auto &ids = td->set_characterStyleIDs(pool, cc);
+                        for (uint32_t j = 0; j < cc; j++) ids[j] = 0;
+                    }
+                    n.set_textData(td);
                 }
-                n.set_textData(td);
             }
         }
 
@@ -1229,12 +1500,15 @@ static void fillTableNode(
         for (int ri = 0; ri < nRows; ri++) {
             auto [cellS, cellL] = nextGuid();
             float cellY = padTop + (float)ri * (rowH + bodySpacing);
-            const std::string &cellText =
+            const DslLayer *pCell =
                 (ri < (int)layer.tableData.rows.size() &&
                  ci < (int)layer.tableData.rows[ri].size())
-                ? layer.tableData.rows[ri][ci].textContent : "";
+                ? &layer.tableData.rows[ri][ci] : nullptr;
+            // type 为空或 "text" → 模版子节点渲染；否则 → 富类型 Layer
+            bool isRichCell = pCell && !pCell->type.empty() && pCell->type != "text";
 
-            // $Table-Cell（clone tmplCell）
+            // $Table-Cell：高度强制为 rowH，并锁定 auto-layout 为 FIXED，
+            // 保证同行所有列的格子高度严格一致
             {
                 PixsoNode &n = arr[idx++];
                 cloneStructNode(pool, n, *tmpl.tmplCell,
@@ -1243,42 +1517,64 @@ static void fillTableNode(
                                 0.f, cellY,
                                 colW, rowH,
                                 blobRemap);
+                if (n.stackMode()) {
+                    n.set_stackPrimarySizing(StackSize::FIXED);
+                    n.set_stackCounterSizing(StackSize::FIXED);
+                }
             }
 
-            // Cell 子节点（按模版顺序）：TEXT 替换为 DSL cell 文字，非 TEXT 同步 cell 高度
-            for (int ki = 0; ki < (int)tmpl.tmplCellChildren.size(); ki++) {
-                const PixsoNode *ch = tmpl.tmplCellChildren[ki];
-                bool isText = ch->type() && *ch->type() == NodeType::TEXT;
-                auto [cS, cL] = nextGuid();
-                PixsoNode &n = arr[idx++];
-                cloneStructNode(pool, n, *ch, cS, cL,
-                                cellS, cellL, makePos(ki),
-                                kNO, kNO,
-                                isText ? kNO : colW,  // 非 TEXT：宽跟随列宽
-                                isText ? kNO : rowH,  // 非 TEXT：高跟随行高
-                                blobRemap);
-                // TEXT 节点：替换为 DSL cell 文字
-                if (ch->type() && *ch->type() == NodeType::TEXT && !cellText.empty()) {
-                    TextData *td = pool.allocate<TextData>(); new(td) TextData();
-                    td->set_characters(pool.string(cellText.c_str()));
-                    uint32_t cc = 0;
-                    const uint8_t *sp = (const uint8_t*)cellText.c_str();
-                    for (size_t bi = 0; bi < cellText.size(); ) {
-                        uint8_t c = sp[bi];
-                        bi += (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
-                        cc++;
+            if (isRichCell) {
+                // 富类型单元格：把 DSL Layer 整棵树写为 $Table-Cell 的子节点，
+                // 强制根节点尺寸 = colW × rowH，并锁定为 FIXED 防止被 auto-layout 撑开
+                uint32_t richStart = idx;
+                fillLayerNode(pool, arr, idx, *pCell,
+                              cellS, cellL, 0,
+                              symMap, childMaps, gc, &tmpl, &blobRemap);
+                if (idx > richStart) {
+                    Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
+                    sz->set_x(colW); sz->set_y(rowH);
+                    arr[richStart].set_size(sz);
+                    if (arr[richStart].stackMode()) {
+                        arr[richStart].set_stackPrimarySizing(StackSize::FIXED);
+                        arr[richStart].set_stackCounterSizing(StackSize::FIXED);
                     }
-                    if (cc > 0) {
-                        auto &ids = td->set_characterStyleIDs(pool, cc);
-                        for (uint32_t j = 0; j < cc; j++) ids[j] = 0;
+                }
+            } else {
+                // 纯文本单元格：按模版子节点顺序渲染，TEXT 节点替换为 DSL cell 文字
+                const std::string &cellText = pCell ? pCell->textContent : "";
+                for (int ki = 0; ki < (int)tmpl.tmplCellChildren.size(); ki++) {
+                    const PixsoNode *ch = tmpl.tmplCellChildren[ki];
+                    bool isText = ch->type() && *ch->type() == NodeType::TEXT;
+                    auto [cS, cL] = nextGuid();
+                    PixsoNode &n = arr[idx++];
+                    cloneStructNode(pool, n, *ch, cS, cL,
+                                    cellS, cellL, makePos(ki),
+                                    kNO, kNO,
+                                    isText ? kNO : colW,  // 非 TEXT：宽跟随列宽
+                                    isText ? kNO : rowH,  // 非 TEXT：高跟随行高
+                                    blobRemap);
+                    if (ch->type() && *ch->type() == NodeType::TEXT && !cellText.empty()) {
+                        TextData *td = pool.allocate<TextData>(); new(td) TextData();
+                        td->set_characters(pool.string(cellText.c_str()));
+                        uint32_t cc = 0;
+                        const uint8_t *sp = (const uint8_t*)cellText.c_str();
+                        for (size_t bi = 0; bi < cellText.size(); ) {
+                            uint8_t c = sp[bi];
+                            bi += (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
+                            cc++;
+                        }
+                        if (cc > 0) {
+                            auto &ids = td->set_characterStyleIDs(pool, cc);
+                            for (uint32_t j = 0; j < cc; j++) ids[j] = 0;
+                        }
+                        n.set_textData(td);
                     }
-                    n.set_textData(td);
                 }
             }
         }
     }
 
-    // === 4. 第二子节点（clone tmplRect，不修改任何位置/尺寸，原样克隆）===
+    // === 6. tmplRect（root 的第二子节点）===
     {
         auto [rectS, rectL] = nextGuid();
         PixsoNode &n = arr[idx++];
@@ -1699,6 +1995,12 @@ static void collectCompSetKeys(const DslLayer &layer, std::set<std::string> &key
         keys.insert(layer.componentSetKey);
     for (auto &child : layer.children)
         collectCompSetKeys(child, keys);
+    // 遍历表格的富类型列头和单元格中的实例
+    for (auto &hdr : layer.tableData.headers)
+        if (!hdr.type.empty()) collectCompSetKeys(hdr, keys);
+    for (auto &row : layer.tableData.rows)
+        for (auto &cell : row)
+            collectCompSetKeys(cell, keys);
 }
 
 // =============================================================================

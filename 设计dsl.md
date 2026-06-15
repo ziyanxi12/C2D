@@ -226,6 +226,7 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 | `col_width` | number | 否 | 每列宽度（px）。为 `0` 时自动按 `box.width / 列数` 均分 |
 | `row_height` | number | 否 | 数据行高（px）。为 `0` 时沿用模版默认值 |
 | `header_height` | number | 否 | 表头行高（px）。为 `0` 时沿用模版默认值 |
+| `show_checkbox` | boolean | 否 | 是否显示多选框列，默认 `false`。为 `true` 时表格左侧增加一列多选框（需表格模版支持）|
 | `headers` | (string \| Layer)[] | 是 | 列头描述列表，长度决定列数。元素为 `string` 时渲染为纯文本；为 `Layer` 时按图层类型渲染（支持 `text` / `frame` / `instance` 等），规则与单元格完全相同 |
 | `rows` | Layer[][] | 是 | 数据行列表，每行是一个 `Layer` 数组（每格一个完整图层，支持 text / frame / instance 等任意类型）|
 
@@ -244,6 +245,7 @@ box.width 也为 0       → 使用模版默认列宽
 - 表格图层**不含 `children` 字段**，单元格内容通过 `rows` 传入
 - 每格（cell）是一个完整的 `Layer`，其 `id` 字段作为该节点的 GUID 写入 hex
 - 表格视觉风格完全由 `--table-template` 指定的 hex 文件控制；若未传入模版，表格节点将被替换为一个不可见的占位 FRAME
+- `show_checkbox: true` 时，表格左侧自动增加一列多选框，视觉样式由模版中的 `.$Table-Column`（无 Cell 后代）节点提供
 
 ### 示例
 
@@ -347,9 +349,9 @@ box.width 也为 0       → 使用模版默认列宽
 }
 ```
 
-### 示例二：富文本表头 + 富内容单元格
+### 示例二：富文本表头 + 富内容单元格 + 多选框列
 
-表头最后一列为「设置图标 + 设置文本」组合，第一列为纯文本「状态」；数据行第一列为「小绿圆图标 + 活着文本」，最后一列为「编辑图标 + 复制图标」。
+表头最后一列为「设置图标 + 设置文本」组合，第一列为纯文本「状态」；数据行第一列为「小绿圆图标 + 活着文本」，最后一列为「编辑图标 + 复制图标」。表格左侧显示多选框列（`show_checkbox: true`）。
 
 ```json
 {
@@ -364,6 +366,7 @@ box.width 也为 0       → 使用模版默认列宽
     "col_width": 0,
     "row_height": 48,
     "header_height": 48,
+    "show_checkbox": true,
     "headers": [
       "状态",
       "服务名称",

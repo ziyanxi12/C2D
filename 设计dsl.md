@@ -79,7 +79,7 @@
 
 ### InstanceLayer（实例图层）
 
-`type` 固定为 `"instance"`。实例图层**不含 `children`**，内容由库在运行时提供。
+`type` 固定为 `"instance"`。实例图层**不含 `children`**，也**不含** `fills`、`strokes`、`effects`、`corner_radius` 等外观字段，内容由库在运行时提供。
 
 | 字段 | 类型 | 必选 | 说明 |
 |---|---|---|---|
@@ -96,9 +96,9 @@
 | `symbol_id` | string | 是 | 变体 SYMBOL 的 GUID，格式 `"sessionID:localID"`。转换时与组件集 hex 中查到的 GUID 做校验，不一致则以库为准并更新 |
 | `variant_key` | string | 是 | 变体的 `componentKey`（该 SYMBOL 的全局唯一 hash）|
 | `component_set_key` | string | 是 | 所属组件集的 `componentKey`；若该组件无父组件集，则与 `variant_key` 相同 |
-| `component_set_resolved` | boolean | 是 | 组件集是否可在已加载的库中被解析。`false` 表示 key 存在但库不可用 |
+| `component_set_resolved` | boolean | 是 | 本地库是否已成功解析该组件集，默认为 `true`。`false` 表示组件集 key 存在但对应库文件当前不可用，`dsl-to-hex` 转换时将降级处理 |
 | `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"h-design-chart/component/93_55829.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
-| `variant_props` | object | 否 | 变体属性键值对，如 `{"状态": "Pressed", "尺寸": "Medium"}` |
+| `variant_props` | object | 否 | 变体属性键值对；key 格式由组件库定义，可为中文或英文，如 `{"status": "primary", "size": "normal"}` 或 `{"状态": "Pressed", "尺寸": "Medium"}` |
 | `overrides` | InstanceOverride[] | 否 | 实例级属性覆写列表 |
 
 ### InstanceOverride
@@ -113,41 +113,52 @@
 
 ## BoundingBox
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `x` | number | 相对父节点的 X 偏移（来自 transform.m02）|
-| `y` | number | 相对父节点的 Y 偏移（来自 transform.m12）|
-| `width` | number | 宽度 |
-| `height` | number | 高度 |
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `x` | number | 是 | 相对父节点的 X 偏移（来自 transform.m02）|
+| `y` | number | 是 | 相对父节点的 Y 偏移（来自 transform.m12）|
+| `width` | number | 是 | 宽度 |
+| `height` | number | 是 | 高度 |
 
 ---
 
 ## AutoLayout
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `direction` | string | `"horizontal"` / `"vertical"` |
-| `gap` | number | 主轴间距 |
-| `counter_gap` | number | 交叉轴间距（wrap 模式下）|
-| `padding` | number[4] | 内边距 `[top, right, bottom, left]` |
-| `align_items` | string | 交叉轴对齐：`"min"` / `"center"` / `"max"` / `"stretch"` |
-| `justify_content` | string | 主轴对齐：`"min"` / `"center"` / `"max"` / `"space_evenly"` |
-| `wrap` | boolean | 是否换行 |
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `direction` | string | 是 | `"horizontal"` / `"vertical"` |
+| `gap` | number | 是 | 主轴间距 |
+| `counter_gap` | number | 否 | 交叉轴间距（仅 `wrap: true` 时有效）|
+| `padding` | number[4] | 是 | 内边距 `[top, right, bottom, left]` |
+| `align_items` | string | 是 | 交叉轴对齐：`"min"` / `"center"` / `"max"` / `"stretch"` |
+| `justify_content` | string | 是 | 主轴对齐：`"min"` / `"center"` / `"max"` / `"space_evenly"` |
+| `wrap` | boolean | 是 | 是否换行 |
 
 ---
 
 ## Fill / Stroke
 
-Fill 和 Stroke 共享相同的字段结构。
+Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型，`image_hash` 字段仅对 Fill 有效。
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `type` | string | `"solid"` / `"gradient_linear"` / `"gradient_radial"` / `"image"` |
-| `visible` | boolean | 是否可见 |
-| `opacity` | number | 填充/描边透明度 |
-| `color` | string | HEX 颜色（仅 `solid`），如 `"#FF5733FF"`（含 Alpha）|
-| `stops` | ColorStop[] | 渐变色标（仅渐变类型）|
-| `image_hash` | string | 图片 hash（仅 `image`）|
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `type` | string | 是 | Fill：`"solid"` / `"gradient_linear"` / `"gradient_radial"` / `"image"`；Stroke：`"solid"` / `"gradient_linear"` / `"gradient_radial"` |
+| `visible` | boolean | 是 | 是否可见 |
+| `opacity` | number | 是 | 填充/描边透明度 |
+| `color` | string | 否 | HEX 颜色（仅 `solid`），如 `"#FF5733FF"`（含 Alpha）|
+| `stops` | ColorStop[] | 否 | 渐变色标（仅渐变类型），见 [ColorStop](#colorstop) |
+| `image_hash` | string | 否 | 图片 hash（仅 Fill `image` 类型，Stroke 不支持）|
+
+---
+
+## ColorStop
+
+渐变色标，用于描述渐变填充中每个颜色节点的位置和颜色。
+
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `color` | string | 是 | HEX 颜色（含 Alpha），如 `"#1677FFFF"` |
+| `position` | number | 是 | 色标位置，范围 `0`~`1`（`0` 为起点，`1` 为终点）|
 
 ---
 
@@ -155,34 +166,34 @@ Fill 和 Stroke 共享相同的字段结构。
 
 效果列表用于添加阴影、模糊等视觉效果。
 
-**注意：Effect字段当前未完整实现，详细信息如下：**
+**注意：Effect 字段当前未完整实现，详细信息如下：**
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `type` | string | `"drop_shadow"` / `"inner_shadow"` / `"layer_blur"` / `"foreground_blur"` |
-| `visible` | boolean | 是否可见 |
-| `offset_x` | number | 阴影X偏移（仅阴影类型）|
-| `offset_y` | number | 阴影Y偏移（仅阴影类型）|
-| `blur` | number | 模糊半径/阴影半径 |
-| `spread` | number | 阴影扩散（仅阴影类型）|
-| `color` | string | HEX颜色（含Alpha）|
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `type` | string | 是 | `"drop_shadow"` / `"inner_shadow"` / `"layer_blur"` / `"foreground_blur"` |
+| `visible` | boolean | 是 | 是否可见 |
+| `offset_x` | number | 否 | 阴影 X 偏移（仅阴影类型）|
+| `offset_y` | number | 否 | 阴影 Y 偏移（仅阴影类型）|
+| `blur` | number | 是 | 模糊半径/阴影模糊半径 |
+| `spread` | number | 否 | 阴影扩散（仅阴影类型）|
+| `color` | string | 否 | HEX 颜色（含 Alpha，仅阴影类型）|
 
-**完整Effect结构待补充，当前仅支持基本阴影效果。**
+**完整 Effect 结构待补充，当前仅支持基本阴影效果。**
 
 ---
 
 ## TextStyle
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `font_family` | string | 字体名称 |
-| `font_style` | string | 字重/样式，如 `"Regular"` / `"Bold"` |
-| `font_size` | number | 字号（px）|
-| `color` | string | 文字颜色（HEX + Alpha）|
-| `letter_spacing` | number | 字间距 |
-| `line_height` | number \| string | 行高（px 或 `"auto"`）|
-| `align_h` | string | 水平对齐：`"left"` / `"center"` / `"right"` / `"justified"` |
-| `align_v` | string | 垂直对齐：`"top"` / `"center"` / `"bottom"` |
+| 字段 | 类型 | 必选 | 说明 |
+|---|---|---|---|
+| `font_family` | string | 是 | 字体名称 |
+| `font_style` | string | 是 | 字重/样式，如 `"Regular"` / `"Bold"` / `"Medium"` |
+| `font_size` | number | 是 | 字号（px）|
+| `color` | string | 是 | 文字颜色（HEX + Alpha）|
+| `letter_spacing` | number | 是 | 字间距 |
+| `line_height` | number \| string | 是 | 行高（px 或 `"auto"`）|
+| `align_h` | string | 是 | 水平对齐：`"left"` / `"center"` / `"right"` / `"justified"` |
+| `align_v` | string | 是 | 垂直对齐：`"top"` / `"center"` / `"bottom"` |
 
 ---
 
@@ -364,14 +375,13 @@ box.width 也为 0       → 使用模版默认列宽
 |---|---|---|---|
 | `is_placeholder` | boolean | 是 | 是否为占位符 |
 | `replacement_type` | `"svg"` \| `"image"` | 是 | 替换类型：<br>• `"svg"` - 矢量 SVG 资源<br>• `"image"` - 图片资源 |
-| `note` | string | 否 | SVG 或图片的详细数据（SVG 字符串 或 图片 base64）|
+| `note` | string | 否 | DSL 中存放原始 SVG 字符串或图片 base64 内容；`dsl-to-hex` 转换时会将其提取为独立资源文件并写入 zip，hex 中对应位置替换为文件名（格式 `{guid}.svg` / `{guid}.png`，guid = 图层 id 冒号替换为下划线）|
 
 **pluginData 写入规则**：
 - 当图层包含 `placeholder` 字段时，解析器会将其写入 PixsoNode 的 pluginData 数组
 - pluginID：`"pix-dsl"`
 - key：`"placeholder_meta"`
-- value：JSON 字符串格式，包含上述三个字段
-- `note` 字段在输出 hex 中为 zip 包内的资源文件名（格式 `{guid}.svg` 或 `{guid}.png`，guid = 图层 id 冒号换下划线）
+- value：JSON 字符串格式，包含上述三个字段（`note` 此时已替换为资源文件名）
 
 **示例**：
 ```json

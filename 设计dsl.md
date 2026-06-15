@@ -97,7 +97,7 @@
 | `variant_key` | string | 是 | 变体的 `componentKey`（该 SYMBOL 的全局唯一 hash）|
 | `component_set_key` | string | 是 | 所属组件集的 `componentKey`；若该组件无父组件集，则与 `variant_key` 相同 |
 | `component_set_resolved` | boolean | 是 | 本地库是否已成功解析该组件集，默认为 `true`。`false` 表示组件集 key 存在但对应库文件当前不可用，`dsl-to-hex` 转换时将降级处理 |
-| `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"h-design-chart/component/93_55829.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
+| `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
 | `variant_props` | object | 否 | 变体属性键值对；key 格式由组件库定义，可为中文或英文，如 `{"status": "primary", "size": "normal"}` 或 `{"状态": "Pressed", "尺寸": "Medium"}` |
 | `overrides` | InstanceOverride[] | 否 | 实例级属性覆写列表 |
 
@@ -351,8 +351,8 @@ box.width 也为 0       → 使用模版默认列宽
                 "symbol_id": "10:30",
                 "variant_key": "549fdf93a10fec402c93432a2e228e407ccc2954",
                 "component_set_key": "ecb8481025909ec9371c3b25104bb8b7c1079224",
-                "component_set_resolved": false,
-                "path": "h-design-chart/component/93_55829.txt",
+                "component_set_resolved": true,
+                "path": "h-design-chart/component/ecb8481025909ec9371c3b25104bb8b7c1079224.txt",
                 "variant_props": { "尺寸": "40" },
                 "overrides": []
               }
@@ -388,7 +388,7 @@ box.width 也为 0       → 使用模版默认列宽
 {
   "id": "1:14",
   "name": "眼睛图标",
-  "type": "ellipse",
+  "type": "rectangle",
   "placeholder": {
     "is_placeholder": true,
     "replacement_type": "svg",

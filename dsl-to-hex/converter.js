@@ -72,6 +72,17 @@ function collectHexRefs(layer, out) {
   for (const child of layer.children || []) {
     collectHexRefs(child, out);
   }
+  const table = layer.table;
+  if (table) {
+    for (const header of table.headers || []) {
+      if (typeof header === 'object') collectHexRefs(header, out);
+    }
+    for (const row of table.rows || []) {
+      for (const cell of row || []) {
+        collectHexRefs(cell, out);
+      }
+    }
+  }
 }
 
 function extractHexRefs(dsl) {
@@ -97,6 +108,17 @@ function collectPlaceholders(layer, out) {
   }
   for (const child of layer.children || []) {
     collectPlaceholders(child, out);
+  }
+  const table = layer.table;
+  if (table) {
+    for (const header of table.headers || []) {
+      if (typeof header === 'object') collectPlaceholders(header, out);
+    }
+    for (const row of table.rows || []) {
+      for (const cell of row || []) {
+        collectPlaceholders(cell, out);
+      }
+    }
   }
 }
 

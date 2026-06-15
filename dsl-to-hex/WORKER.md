@@ -20,7 +20,7 @@ worker 启动时会 `require('./core')` 并校验以下导出，缺失任何一�
 
 #### `init(): Promise<void> | void`
 
-初始化业务模块（预热 WASM 等）。worker 会等待其完成后才发送 `ready`。
+初始化业务模块（预热 WASM，并按 `TABLE_TEMPLATE_PATH` 预加载表格模板）。worker 会等待其完成后才发送 `ready`。
 
 #### `convert(dsl: object): Promise<object>`
 
@@ -80,6 +80,12 @@ zip 内容：
 ## 环境变量
 
 `.env` 文件放在 `dsl-to-hex/` 目录下，worker 启动时自动加载。
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `HEX_LIB_DIR` | `../../pixso-parse/pix-split/lib-out` | 组件库 hex 根目录 |
+| `TABLE_TEMPLATE_PATH` | —（未设置则不启用表格） | 表格模板 hex 文件路径（相对 `dsl-to-hex/` 目录或绝对路径）。`init()` 阶段读取并缓存；`table` 类型节点依赖此模板，缺失时退化为空占位 FRAME |
+| `WASM_PATH` | `./bin/dsl_to_hex.js` | WASM 加载器路径 |
 
 ## 启动流程
 

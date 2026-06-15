@@ -30,6 +30,7 @@ PORT=3101 HEX_LIB_DIR=/path/to/lib-out node server.js
 |---|---|---|
 | `PORT` | `3101` | 监听端口 |
 | `HEX_LIB_DIR` | `../../pixso-parse/pix-split/lib-out` | 组件库 hex 根目录；DSL 中 instance 的 `path` 字段是相对此目录的路径，拼接后直接读本地文件。须与 component-service 的 `LIB_OUT_DIR` 指向同一份数据 |
+| `TABLE_TEMPLATE_PATH` | —（未设置则不启用表格） | 表格模板 hex 文件路径（相对 `dsl-to-hex/` 目录或绝对路径）。启动时读取并缓存；`table` 类型节点依赖此模板生成正确结构，缺失时退化为空占位 FRAME |
 | `WASM_PATH` | `./bin/dsl_to_hex.js` | WASM 加载器路径（`.wasm` 文件须在同目录） |
 
 ---
@@ -37,16 +38,17 @@ PORT=3101 HEX_LIB_DIR=/path/to/lib-out node server.js
 ## 内部处理流程
 
 ```
-POST /convert { dsl }
+POST /convert { dsl, tableTemplate? }
   │
   ├─ 1. 扫描 DSL 图层树，收集所有 instance 图层的 { component_set_key, path }
   ├─ 2. 拼接 HEX_LIB_DIR + path，直接读取本地 hex 文件内容
   │      缺少 path 字段或读取失败的 key 记入 missing_keys，不中断流程
   ├─ 3. 创建临时目录，写入：
-  │      {key}.txt        —— 组件 hex（供 WASM 查找，key 为 component_set_key）
-  │      {guid}.svg/png   —— placeholder 资源文件
-  │      dsl.json         —— DSL 输入
-  ├─ 4. 调用 WASM：dslToHex(dslPath, tmpDir) → hex 字符串
+  │      {key}.txt             —— 组件 hex（供 WASM 查找，key 为 component_set_key）
+  │      {guid}.svg/png        —— placeholder 资源文件
+  │      dsl.json              —— DSL 输入
+  │      table_template.txt    —— 表格模板 hex（有模板内容时写入，路径传给 WASM）
+  ├─ 4. 调用 WASM：dslToHex(dslPath, tmpDir, tableTemplatePath) → hex 字符串
   │      （转换失败则直接返回 { error }，不再继续打包）
   ├─ 5. 将 hex 写为 output.txt，与 svg/png 文件一起打包为 output.zip
   ├─ 6. 清理临时目录
@@ -97,6 +99,7 @@ POST /convert { dsl }
 |---|---|---|---|
 | `dsl` | object | 是 | 符合设计 DSL 规范的 JSON 对象 |
 | `dsl.pages` | array | 是 | 页面数组，不可为空 |
+| `tableTemplate` | string | 否 | 表格模板 hex 内容（明文字符串）。传入时覆盖服务启动时从 `TABLE_TEMPLATE_PATH` 预加载的缓存；不传则使用缓存值 |
 
 ---
 

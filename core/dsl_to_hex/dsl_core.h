@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 #include <set>
+#include <queue>
 
 // =============================================================================
 // 文件 I/O
@@ -111,10 +112,23 @@ struct TableTemplate {
     const PixsoNode *tmplTable  = nullptr;  // "$Table"
     const PixsoNode *tmplColumn = nullptr;  // ".$Table-Column"
     const PixsoNode *tmplHeader = nullptr;  // ".$Table-Col-Header"
-    const PixsoNode *tmplHdrTxt = nullptr;  // 列头 TEXT（Header 的子节点）
     const PixsoNode *tmplBody   = nullptr;  // ".$Table-Col-Body"
     const PixsoNode *tmplCell   = nullptr;  // ".$Table-Cell"
-    const PixsoNode *tmplRect   = nullptr;  // 分隔矩形
+    const PixsoNode *tmplRect   = nullptr;  // 分隔矩形（第二子节点）
+
+    // tmplHeader 的直接子节点（按模版 kiwi 数组顺序）：
+    //   TEXT  → 替换为 DSL 列头文字
+    //   其余（RECT "bg" 等）→ 原样克隆
+    std::vector<const PixsoNode *> tmplHdrChildren;
+
+    // tmplCell 的直接子节点（按模版 kiwi 数组顺序）：
+    //   TEXT  → 替换为 DSL cell 文字
+    //   其余（RECT "竖线" 等）→ 原样克隆
+    std::vector<const PixsoNode *> tmplCellChildren;
+
+    // 模版中除结构节点外的所有节点（组件库：SYMBOL/FRAME/RECT/VECTOR 等），
+    // 需要原样输出到隐藏页 {0,2}，使 Paging 等 INSTANCE 引用的 SYMBOL 能正确渲染。
+    std::vector<const PixsoNode *> libraryNodes;
 
     // 从模版提取的默认尺寸
     float colWidth     = 409.f;
@@ -587,6 +601,12 @@ static std::string makePos(int idx) {
     return buf;
 }
 
+struct GuidCounter {
+    uint32_t session = 1;
+    uint32_t local   = 0;
+    std::pair<uint32_t,uint32_t> next() { return {session, ++local}; }
+};
+
 // =============================================================================
 // 类型映射
 // =============================================================================
@@ -663,18 +683,15 @@ static uint32_t countLayerNodes(const DslLayer &layer, const TableTemplate *tmpl
         // 无模版时填 1 个占位 FRAME，保持节点计数一致
         if (!tmpl || !tmpl->valid()) return 1;
         int nCols = (int)layer.tableData.headers.size();
+        int nRows = (int)layer.tableData.rows.size();
         // root("表格") + $Table + 矩形分隔
         uint32_t n = 3;
-        // 每列：$Table-Column + $Table-Col-Header + 列头TEXT + $Table-Col-Body
-        n += (uint32_t)nCols * 4;
-        // 每格：$Table-Cell + cell DslLayer 子树（递归统计）
-        for (const auto &row : layer.tableData.rows) {
-            for (int ci = 0; ci < nCols; ci++) {
-                n++;  // $Table-Cell
-                if (ci < (int)row.size())
-                    n += countLayerNodes(row[ci], tmpl);
-            }
-        }
+        // 每列：$Table-Column + $Table-Col-Header + header子节点 + $Table-Col-Body
+        uint32_t hdrChildCnt = (uint32_t)tmpl->tmplHdrChildren.size();
+        n += (uint32_t)nCols * (3u + hdrChildCnt);
+        // 每格：$Table-Cell + cell 子节点（模版 RECT 原样 + 模版 TEXT 替换内容）
+        uint32_t cellChildCnt = (uint32_t)tmpl->tmplCellChildren.size();
+        n += (uint32_t)nCols * (uint32_t)nRows * (1u + cellChildCnt);
         return n;
     }
     uint32_t n = 1;
@@ -690,6 +707,8 @@ static uint32_t countTotal(const DslDoc &doc, uint32_t compNodeCount = 0,
         for (auto &layer : page.layers)
             n += countLayerNodes(layer, tmpl);
     n += compNodeCount;
+    if (tmpl && tmpl->valid())
+        n += (uint32_t)tmpl->libraryNodes.size();
     return n;
 }
 
@@ -933,19 +952,62 @@ static bool loadTableTemplate(const char *path, TableTemplate &tmpl) {
         }
     }
 
-    // 找列头 TEXT（.$Table-Col-Header 的直接 TEXT 子节点）
+    // 收集 tmplHeader 的直接子节点（按 kiwi 数组顺序）
     if (tmpl.tmplHeader && tmpl.tmplHeader->guid()) {
         uint32_t hs = tmpl.tmplHeader->guid()->sessionID() ? *tmpl.tmplHeader->guid()->sessionID() : 0;
         uint32_t hl = tmpl.tmplHeader->guid()->localID()   ? *tmpl.tmplHeader->guid()->localID()   : 0;
         auto it = pmap.find(gkStr(hs, hl));
         if (it != pmap.end())
-            for (auto *c : it->second)
-                if (c->type() && *c->type() == NodeType::TEXT) { tmpl.tmplHdrTxt = c; break; }
+            for (auto *c : it->second) tmpl.tmplHdrChildren.push_back(c);
+    }
+
+    // 收集 tmplCell 的直接子节点（按 kiwi 数组顺序）
+    if (tmpl.tmplCell && tmpl.tmplCell->guid()) {
+        uint32_t cs2 = tmpl.tmplCell->guid()->sessionID() ? *tmpl.tmplCell->guid()->sessionID() : 0;
+        uint32_t cl2 = tmpl.tmplCell->guid()->localID()   ? *tmpl.tmplCell->guid()->localID()   : 0;
+        auto it = pmap.find(gkStr(cs2, cl2));
+        if (it != pmap.end())
+            for (auto *c : it->second) tmpl.tmplCellChildren.push_back(c);
     }
 
     if (!tmpl.valid()) {
         fprintf(stderr, "  [WARN] 表格模版缺少节点（需要: $Table/$Table-Column/Header/Body/Cell/矩形）\n");
         return false;
+    }
+
+    // 收集结构性节点 GUID（BFS 从 tmplRoot 出发，含所有后代）
+    {
+        std::set<std::string> structGuids;
+        std::queue<std::string> bfsQ;
+
+        auto enqueue = [&](const PixsoNode *n) {
+            if (!n || !n->guid()) return;
+            uint32_t s = n->guid()->sessionID() ? *n->guid()->sessionID() : 0;
+            uint32_t l = n->guid()->localID()   ? *n->guid()->localID()   : 0;
+            std::string key = gkStr(s, l);
+            if (structGuids.insert(key).second) bfsQ.push(key);
+        };
+
+        enqueue(tmpl.tmplRoot);
+        while (!bfsQ.empty()) {
+            std::string pk = bfsQ.front(); bfsQ.pop();
+            auto it = pmap.find(pk);
+            if (it != pmap.end())
+                for (const PixsoNode *ch : it->second) enqueue(ch);
+        }
+
+        // 其余非 CANVAS、非结构性节点 → library
+        for (uint32_t i = 0; i < nodes->size(); i++) {
+            const PixsoNode &n = (*nodes)[i];
+            if (n.type() && *n.type() == NodeType::CANVAS) continue;
+            if (!n.guid()) continue;
+            uint32_t s = n.guid()->sessionID() ? *n.guid()->sessionID() : 0;
+            uint32_t l = n.guid()->localID()   ? *n.guid()->localID()   : 0;
+            if (structGuids.count(gkStr(s, l))) continue;
+            tmpl.libraryNodes.push_back(&n);
+        }
+        printf("  表格模版: 结构节点 %zu，library 节点 %zu\n",
+               structGuids.size(), tmpl.libraryNodes.size());
     }
 
     // 提取默认尺寸
@@ -1004,7 +1066,7 @@ static void cloneStructNode(
     remapBlobsInNode(dst, blobRemap);
 }
 
-// 前向声明（fillTableNode 内部需要调用 fillLayerNode 处理 cell 内容）
+// 前向声明（fillTableNode 调用 fillLayerNode 处理非表格图层）
 static void fillLayerNode(kiwi::MemoryPool &pool,
                           kiwi::Array<PixsoNode> &arr,
                           uint32_t &idx,
@@ -1013,6 +1075,7 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                           int childPos,
                           const SymbolMap &symMap,
                           const std::map<CompSetData*, ChildrenMap> &childMaps,
+                          GuidCounter &gc,
                           TableTemplate *tmpl,
                           const std::map<int32_t,int32_t> *tmplBlobRemap);
 
@@ -1027,11 +1090,9 @@ static void fillTableNode(
     const SymbolMap &symMap,
     const std::map<CompSetData*, ChildrenMap> &childMaps,
     TableTemplate &tmpl,
-    const std::map<int32_t,int32_t> &blobRemap)
+    const std::map<int32_t,int32_t> &blobRemap,
+    GuidCounter &gc)
 {
-    auto gk = parseGK(layer.id);
-    uint32_t ts = gk.s, tl = gk.l;
-
     int nCols = (int)layer.tableData.headers.size();
     int nRows = (int)layer.tableData.rows.size();
 
@@ -1062,14 +1123,10 @@ static void fillTableNode(
     float tableW  = (float)nCols * colW;
     float tableH  = colH + rootGap + rectH;
 
-    // 结构节点 GUID 计数器：{ts, tl*10000 + 递增序号}
-    uint32_t subL = tl * 10000u + 1u;
-    auto nextGuid = [&]() -> std::pair<uint32_t,uint32_t> {
-        return {ts, subL++};
-    };
+    auto nextGuid = [&]() { return gc.next(); };
 
     // === 1. 根 "表格" FRAME（clone tmplRoot）===
-    uint32_t rootS = ts, rootL = tl;
+    auto [rootS, rootL] = gc.next();
     {
         PixsoNode &n = arr[idx++];
         cloneStructNode(pool, n, *tmpl.tmplRoot,
@@ -1125,31 +1182,20 @@ static void fillTableNode(
                             blobRemap);
         }
 
-        // 列头 TEXT（clone tmplHdrTxt，若无则程序化生成）
-        {
-            auto [htS, htL] = nextGuid();
+        // Header 子节点（按模版顺序）：TEXT 替换为列头文字，非 TEXT 同步 header 宽高
+        for (int hi = 0; hi < (int)tmpl.tmplHdrChildren.size(); hi++) {
+            const PixsoNode *ch = tmpl.tmplHdrChildren[hi];
+            bool isText = ch->type() && *ch->type() == NodeType::TEXT;
+            auto [cS, cL] = nextGuid();
             PixsoNode &n = arr[idx++];
-            if (tmpl.tmplHdrTxt) {
-                cloneStructNode(pool, n, *tmpl.tmplHdrTxt,
-                                htS, htL,
-                                hdrS, hdrL, makePos(0),
-                                kNO, kNO, kNO, kNO,
-                                blobRemap);
-            } else {
-                n.set_type(NodeType::TEXT);
-                n.set_phase(NodePhase::CREATED);
-                n.set_guid(makeGUID(pool, htS, htL));
-                n.set_parentIndex(makeParent(pool, hdrS, hdrL, makePos(0)));
-                Matrix *mat = pool.allocate<Matrix>(); new(mat) Matrix();
-                mat->set_m00(1.f); mat->set_m01(0.f); mat->set_m02(16.f);
-                mat->set_m10(0.f); mat->set_m11(1.f); mat->set_m12(5.f);
-                n.set_transform(mat);
-                Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
-                sz->set_x(colW - 32.f); sz->set_y(hdrH - 10.f);
-                n.set_size(sz);
-            }
-            // 无论哪种方式，都覆盖 textData 为列头文字
-            if (!hdrText.empty()) {
+            cloneStructNode(pool, n, *ch, cS, cL,
+                            hdrS, hdrL, makePos(hi),
+                            kNO, kNO,
+                            isText ? kNO : colW,   // 非 TEXT：宽跟随列宽
+                            isText ? kNO : hdrH,   // 非 TEXT：高跟随列头高
+                            blobRemap);
+            // TEXT 节点：替换为 DSL 列头文字
+            if (ch->type() && *ch->type() == NodeType::TEXT && !hdrText.empty()) {
                 TextData *td = pool.allocate<TextData>(); new(td) TextData();
                 td->set_characters(pool.string(hdrText.c_str()));
                 uint32_t cc = 0;
@@ -1183,6 +1229,10 @@ static void fillTableNode(
         for (int ri = 0; ri < nRows; ri++) {
             auto [cellS, cellL] = nextGuid();
             float cellY = padTop + (float)ri * (rowH + bodySpacing);
+            const std::string &cellText =
+                (ri < (int)layer.tableData.rows.size() &&
+                 ci < (int)layer.tableData.rows[ri].size())
+                ? layer.tableData.rows[ri][ci].textContent : "";
 
             // $Table-Cell（clone tmplCell）
             {
@@ -1195,14 +1245,35 @@ static void fillTableNode(
                                 blobRemap);
             }
 
-            // cell 内容：来自 DSL 的 DslLayer，走已有 fillLayerNode 逻辑
-            if (ri < (int)layer.tableData.rows.size() &&
-                ci < (int)layer.tableData.rows[ri].size()) {
-                const DslLayer &cellLayer = layer.tableData.rows[ri][ci];
-                fillLayerNode(pool, arr, idx, cellLayer,
-                              cellS, cellL, 0,
-                              symMap, childMaps,
-                              &tmpl, &blobRemap);
+            // Cell 子节点（按模版顺序）：TEXT 替换为 DSL cell 文字，非 TEXT 同步 cell 高度
+            for (int ki = 0; ki < (int)tmpl.tmplCellChildren.size(); ki++) {
+                const PixsoNode *ch = tmpl.tmplCellChildren[ki];
+                bool isText = ch->type() && *ch->type() == NodeType::TEXT;
+                auto [cS, cL] = nextGuid();
+                PixsoNode &n = arr[idx++];
+                cloneStructNode(pool, n, *ch, cS, cL,
+                                cellS, cellL, makePos(ki),
+                                kNO, kNO,
+                                isText ? kNO : colW,  // 非 TEXT：宽跟随列宽
+                                isText ? kNO : rowH,  // 非 TEXT：高跟随行高
+                                blobRemap);
+                // TEXT 节点：替换为 DSL cell 文字
+                if (ch->type() && *ch->type() == NodeType::TEXT && !cellText.empty()) {
+                    TextData *td = pool.allocate<TextData>(); new(td) TextData();
+                    td->set_characters(pool.string(cellText.c_str()));
+                    uint32_t cc = 0;
+                    const uint8_t *sp = (const uint8_t*)cellText.c_str();
+                    for (size_t bi = 0; bi < cellText.size(); ) {
+                        uint8_t c = sp[bi];
+                        bi += (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
+                        cc++;
+                    }
+                    if (cc > 0) {
+                        auto &ids = td->set_characterStyleIDs(pool, cc);
+                        for (uint32_t j = 0; j < cc; j++) ids[j] = 0;
+                    }
+                    n.set_textData(td);
+                }
             }
         }
     }
@@ -1232,6 +1303,7 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                           int childPos,
                           const SymbolMap &symMap,
                           const std::map<CompSetData*, ChildrenMap> &childMaps,
+                          GuidCounter &gc,
                           TableTemplate *tmpl = nullptr,
                           const std::map<int32_t,int32_t> *tmplBlobRemap = nullptr) {
     // ── 表格类型：分发给 fillTableNode ──────────────────────────────────────
@@ -1240,11 +1312,11 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
             fprintf(stderr, "  [WARN] table 节点 \"%s\" 需要 --table-template，写入占位 FRAME\n",
                     layer.name.c_str());
             // 填 1 个占位 FRAME，保持节点计数与 countLayerNodes 一致
-            auto gk = parseGK(layer.id);
+            auto [nodeS, nodeL] = gc.next();
             PixsoNode &ph = arr[idx++];
             ph.set_type(NodeType::FRAME);
             ph.set_phase(NodePhase::CREATED);
-            ph.set_guid(makeGUID(pool, gk.s, gk.l));
+            ph.set_guid(makeGUID(pool, nodeS, nodeL));
             ph.set_name(pool.string(layer.name.c_str()));
             ph.set_visible(false);
             ph.set_opacity(0.0f);
@@ -1261,7 +1333,7 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         static const std::map<int32_t,int32_t> emptyRemap;
         fillTableNode(pool, arr, idx, layer, parentS, parentL, childPos,
                       symMap, childMaps, *tmpl,
-                      tmplBlobRemap ? *tmplBlobRemap : emptyRemap);
+                      tmplBlobRemap ? *tmplBlobRemap : emptyRemap, gc);
         return;
     }
     if (layer.type == "instance") {
@@ -1270,13 +1342,13 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                     layer.name.c_str(), layer.id.c_str());
             return;
         }
-        auto gk  = parseGK(layer.id);
+        auto [nodeS, nodeL] = gc.next();
         auto sgk = parseGK(layer.symbolId);
         PixsoNode &n = arr[idx++];
 
         n.set_type(NodeType::INSTANCE);
         n.set_phase(NodePhase::CREATED);
-        n.set_guid(makeGUID(pool, gk.s, gk.l));
+        n.set_guid(makeGUID(pool, nodeS, nodeL));
         n.set_name(pool.string(layer.name.c_str()));
         n.set_visible(layer.visible);
         n.set_opacity(layer.opacity);
@@ -1372,12 +1444,12 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         return;
     }
 
-    auto gk = parseGK(layer.id);
+    auto [nodeS, nodeL] = gc.next();
     PixsoNode &n = arr[idx++];
 
     n.set_type(mapLayerType(layer.type));
     n.set_phase(NodePhase::CREATED);
-    n.set_guid(makeGUID(pool, gk.s, gk.l));
+    n.set_guid(makeGUID(pool, nodeS, nodeL));
     n.set_name(pool.string(layer.name.c_str()));
     n.set_visible(layer.visible);
     n.set_opacity(layer.opacity);
@@ -1614,8 +1686,8 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
     }
 
     for (size_t i = 0; i < layer.children.size(); i++)
-        fillLayerNode(pool, arr, idx, layer.children[i], gk.s, gk.l, (int)i,
-                      symMap, childMaps, tmpl, tmplBlobRemap);
+        fillLayerNode(pool, arr, idx, layer.children[i], nodeS, nodeL, (int)i,
+                      symMap, childMaps, gc, tmpl, tmplBlobRemap);
 }
 
 // =============================================================================
@@ -1802,6 +1874,31 @@ static std::vector<uint8_t> buildMsg(
         printf("  merged blobs: %zu 条\n", mergedBlobs.size());
     }
 
+    // ── DSL 节点 session ID：比所有组件集（含表格模版）中最大 session 大 1，
+    // 保证与组件库 GUID 完全不冲突。
+    uint32_t maxCompSession = 1;
+    for (auto &cs : compSets) {
+        auto *nodes = cs->msg.pixsoNodes();
+        if (!nodes) continue;
+        for (uint32_t i = 0; i < nodes->size(); i++) {
+            const PixsoNode &n = (*nodes)[i];
+            if (n.guid() && n.guid()->sessionID())
+                maxCompSession = std::max(maxCompSession, *n.guid()->sessionID());
+        }
+    }
+    if (tmpl && tmpl->valid()) {
+        auto *nodes = tmpl->msg.pixsoNodes();
+        if (nodes) {
+            for (uint32_t i = 0; i < nodes->size(); i++) {
+                const PixsoNode &n = (*nodes)[i];
+                if (n.guid() && n.guid()->sessionID())
+                    maxCompSession = std::max(maxCompSession, *n.guid()->sessionID());
+            }
+        }
+    }
+    GuidCounter gc;
+    gc.session = maxCompSession + 1;
+
     // ── 可见 CANVAS + 图层（每个 DSL page）──────────────────────────────────
     // GUID 规律：page 0 → {0,1}，page 1 → {0,3}，page 2 → {0,4}，跳过 {0,2}
     for (size_t pi = 0; pi < doc.pages.size(); pi++) {
@@ -1817,7 +1914,7 @@ static std::vector<uint8_t> buildMsg(
 
         for (size_t li = 0; li < page.layers.size(); li++)
             fillLayerNode(pool, arr, idx, page.layers[li], 0, canvasL, (int)li,
-                          symMap, childMaps, tmpl, &tmplBlobRemap);
+                          symMap, childMaps, gc, tmpl, &tmplBlobRemap);
     }
 
     // ── 隐藏 CANVAS {0,2}（组件库节点的挂载点）──────────────────────────────
@@ -1882,6 +1979,16 @@ static std::vector<uint8_t> buildMsg(
             if (csRemap)
                 remapBlobsInNode(arr[idx], *csRemap);
 
+            idx++;
+        }
+    }
+
+    // ── 表格模版 library 节点（组件定义，原样输出到 {0,2}）────────────────────
+    if (tmpl && tmpl->valid() && !tmpl->libraryNodes.empty()) {
+        for (const PixsoNode *libNode : tmpl->libraryNodes) {
+            arr[idx] = *libNode;
+            if (!tmplBlobRemap.empty())
+                remapBlobsInNode(arr[idx], tmplBlobRemap);
             idx++;
         }
     }

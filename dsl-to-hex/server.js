@@ -1,7 +1,8 @@
 'use strict';
 
 const http      = require('http');
-const { convert, getWasm, HEX_LIB_DIR } = require('./converter');
+const { convert, HEX_LIB_DIR } = require('./converter');
+const { init }  = require('./core');
 const createLogger = require('../logger');
 
 const PORT = Number(process.env.PORT) || 3101;
@@ -52,7 +53,7 @@ async function handle(req, res) {
       return sendJSON(res, 400, { error: 'invalid JSON body' });
     }
 
-    const { dsl } = body;
+    const { dsl, tableTemplate } = body;
     if (!dsl || typeof dsl !== 'object') {
       return sendJSON(res, 400, { error: 'dsl (object) is required' });
     }
@@ -60,7 +61,7 @@ async function handle(req, res) {
       return sendJSON(res, 400, { error: 'dsl.pages must be an array' });
     }
 
-    const result = await convert(dsl);
+    const result = await convert(dsl, tableTemplate);
 
     if (result.error) return sendJSON(res, 500, result);
     return sendJSON(res, 200, result);
@@ -73,12 +74,12 @@ async function handle(req, res) {
 // 启动服务（预热 WASM）
 // ---------------------------------------------------------------------------
 async function main() {
-  logger.info('预热 WASM');
+  logger.info('初始化');
   try {
-    await getWasm();
-    logger.info('WASM 加载成功');
+    await init();   // 预热 WASM + 加载表格模版（读 .env TABLE_TEMPLATE_PATH）
+    logger.info('初始化完成');
   } catch (e) {
-    logger.error('WASM 加载失败', { error: e.message, stack: e.stack });
+    logger.error('初始化失败', { error: e.message, stack: e.stack });
     process.exit(1);
   }
 

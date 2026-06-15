@@ -27,6 +27,17 @@ const HEX_LIB_DIR = process.env.HEX_LIB_DIR
   || path.resolve(__dirname, '../../pixso-parse/pix-split/lib-out');
 
 // ---------------------------------------------------------------------------
+// 表格模版缓存（由 core.init() 通过 setTableTemplate 设置）
+// convert() 调用时若未显式传入 tableTemplate，则使用此缓存值。
+// ---------------------------------------------------------------------------
+let _tableTemplate = '';
+
+function setTableTemplate(content) {
+  _tableTemplate = content || '';
+  logger.info('表格模版已缓存', { bytes: _tableTemplate.length });
+}
+
+// ---------------------------------------------------------------------------
 // WASM 单例（服务生命周期内只初始化一次）
 // ---------------------------------------------------------------------------
 let _wasmMod = null;
@@ -178,7 +189,9 @@ function parseWasmResult(raw) {
 // ---------------------------------------------------------------------------
 // 主转换函数
 // ---------------------------------------------------------------------------
-async function convert(dsl) {
+async function convert(dsl, tableTemplateContent) {
+  // 未显式传入时，使用模块级缓存（由 TABLE_TEMPLATE_PATH 在 init 阶段预加载）
+  if (tableTemplateContent === undefined) tableTemplateContent = _tableTemplate;
   logger.info('开始转换', { pages: dsl.pages?.length || 0 });
 
   // 1. 提取所有 { component_set_key, path } 引用
@@ -223,10 +236,18 @@ async function convert(dsl) {
     const dslPath = path.join(tmpDir, 'dsl.json');
     fs.writeFileSync(dslPath, JSON.stringify(dsl), 'utf8');
 
+    // 表格模板（可选）：写入临时目录后传路径给 WASM
+    let tableTemplatePath = '';
+    if (tableTemplateContent) {
+      tableTemplatePath = path.join(tmpDir, 'table_template.txt');
+      fs.writeFileSync(tableTemplatePath, tableTemplateContent, 'utf8');
+      logger.debug('写入表格模板完成');
+    }
+
     // 4. 调用 WASM（同步，阻塞事件循环，单线程自然串行）
     logger.debug('调用 WASM 转换');
     const mod = await getWasm();
-    const raw = mod.dslToHex(dslPath, tmpDir, '');
+    const raw = mod.dslToHex(dslPath, tmpDir, tableTemplatePath);
     logger.debug('WASM 转换完成', { resultType: raw.startsWith('{"error"') ? 'error' : raw.startsWith('{"hex"') ? 'hex_with_missing' : 'hex' });
 
     // 5. 解析结果
@@ -252,4 +273,4 @@ async function convert(dsl) {
   }
 }
 
-module.exports = { convert, getWasm, HEX_LIB_DIR };
+module.exports = { convert, getWasm, setTableTemplate, HEX_LIB_DIR };

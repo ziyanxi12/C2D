@@ -1,21 +1,35 @@
 'use strict';
 
 // 用法：
-//   node test.js                          # 使用内置 login DSL
-//   node test.js path/to/your-dsl.json   # 使用自己的 DSL 文件
+//   node test.js                                                    # 使用内置 login DSL
+//   node test.js path/to/your-dsl.json                             # 使用自己的 DSL 文件
+//   node test.js path/to/dsl.json --table-template path/to/tmpl.txt  # 带表格模板
 
 const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 
-const PORT    = process.env.PORT || 3101;
-const dslFile = process.argv[2]
-  || path.join(__dirname, 'test-data/login-design-dsl.json');
+const PORT = process.env.PORT || 3101;
+
+// 解析参数
+const args = process.argv.slice(2);
+let dslFile = null;
+let tableTemplateFile = null;
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--table-template' && args[i + 1]) {
+    tableTemplateFile = path.resolve(args[++i]);
+  } else if (!dslFile) {
+    dslFile = path.resolve(args[i]);
+  }
+}
+dslFile = dslFile || path.join(__dirname, 'test-data/login-design-dsl.json');
 
 const dsl = JSON.parse(fs.readFileSync(dslFile, 'utf8'));
-const body = JSON.stringify({ dsl });
+const tableTemplate = tableTemplateFile ? fs.readFileSync(tableTemplateFile, 'utf8') : undefined;
+const body = JSON.stringify(tableTemplate ? { dsl, tableTemplate } : { dsl });
 
 console.log(`DSL 文件: ${dslFile}`);
+if (tableTemplateFile) console.log(`表格模板: ${tableTemplateFile}`);
 console.log(`发送到:   http://localhost:${PORT}/convert`);
 
 const req = http.request({

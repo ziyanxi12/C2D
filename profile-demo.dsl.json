@@ -133,7 +133,7 @@
                     "variant_key": "1db35593ea9d14e17bb6b886364e66f9dd82fabc",
                     "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                    "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
                     "variant_props": {
                       "status": "primary",
                       "Interaction": "default",
@@ -156,7 +156,7 @@
                     "variant_key": "325201e6d6e069c39af66b004a0260edeab8563d",
                     "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                    "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
                     "variant_props": {
                       "status": "default",
                       "Interaction": "default",
@@ -224,7 +224,7 @@
                     "variant_key": "3c14e47dd7957399dd4b4264a5bcc15785468009",
                     "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "path": "ICT_UI/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
                     "variant_props": {
                       "_color": "Info蓝色",
                       "size": "normal"
@@ -245,7 +245,7 @@
                     "variant_key": "eb6d68c0a1d28b93b47478f275ec622c0eca9bcc",
                     "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "path": "ICT_UI/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
                     "variant_props": {
                       "_color": "success绿色",
                       "size": "normal"
@@ -266,7 +266,7 @@
                     "variant_key": "04e2f3cbd79512f672f9e1d1def7535c473a628c",
                     "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "path": "ICT_UI/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
                     "variant_props": {
                       "_color": "warn黄色",
                       "size": "normal"
@@ -287,7 +287,7 @@
                     "variant_key": "885696a38961bb73ee8ccd828ae58db715dcc274",
                     "component_set_key": "37a280c2bb780fa3751115c93658294048481a7c",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
+                    "path": "ICT_UI/component/37a280c2bb780fa3751115c93658294048481a7c.txt",
                     "variant_props": {
                       "_color": "Alert橙色",
                       "size": "normal"
@@ -353,7 +353,7 @@
                     "variant_key": "84336a12891e5f86f1165e4a409c86abd90ee807",
                     "component_set_key": "0ecd68df646234cc9236b5dbef4ac9aefdc2cf61",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/0ecd68df646234cc9236b5dbef4ac9aefdc2cf61.txt",
+                    "path": "ICT_UI/component/0ecd68df646234cc9236b5dbef4ac9aefdc2cf61.txt",
                     "variant_props": {
                       "disabled": "false",
                       "type": "number",
@@ -442,7 +442,7 @@
                     "variant_key": "b40abc5b7b78df96b5e97c78645f64033c59a9df",
                     "component_set_key": "11120b95d1ad0ffa9b21e2a62cb761880e04f47b",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
+                    "path": "ICT_UI/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
                     "variant_props": {
                       "size": "large",
                       "status": "loading",
@@ -484,7 +484,7 @@
                     "variant_key": "b8fdf3ff77753d2b679ebe3ee0047d40d8633146",
                     "component_set_key": "11120b95d1ad0ffa9b21e2a62cb761880e04f47b",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
+                    "path": "ICT_UI/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
                     "variant_props": {
                       "size": "large",
                       "status": "success",
@@ -526,7 +526,7 @@
                     "variant_key": "b8fdf3ff77753d2b679ebe3ee0047d40d8633146",
                     "component_set_key": "11120b95d1ad0ffa9b21e2a62cb761880e04f47b",
                     "component_set_resolved": true,
-                    "path": "ict-ui/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
+                    "path": "ICT_UI/component/11120b95d1ad0ffa9b21e2a62cb761880e04f47b.txt",
                     "variant_props": {
                       "size": "large",
                       "status": "success",
@@ -551,7 +551,7 @@
                 "variant_key": "7f599a2db9d8ac901cf4c858825d1e04221d3021",
                 "component_set_key": "9a9da828027b6bdc773731bb333817c0799c208d",
                 "component_set_resolved": true,
-                "path": "ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
+                "path": "ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt",
                 "variant_props": {
                   "status": "primary",
                   "Interaction": "default",

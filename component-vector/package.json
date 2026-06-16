@@ -1,0 +1,17 @@
+{
+  "name": "component-vector",
+  "version": "1.0.0",
+  "description": "组件变体向量索引构建与检索",
+  "main": "vector_search.js",
+  "scripts": {
+    "build": "node build_vector_index.js",
+    "build:mock": "MOCK_EMBED=1 node build_vector_index.js",
+    "build-icons": "node build_icon_index.js",
+    "build-icons:mock": "MOCK_EMBED=1 node build_icon_index.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^9.4.2",
+    "openai": "^6.42.0"
+  }
+}

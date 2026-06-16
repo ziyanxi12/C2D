@@ -27,7 +27,7 @@ PORT=3102 SEARCH_INDEX_PATH=/path/to/search_index.json node server.js
 | `LLM_BASE_URL` | `https://api.deepseek.com/v1` | LLM 接口地址 |
 | `MODEL` | `deepseek-v4-flash` | LLM 模型名，可改为 `deepseek-v4-pro` |
 | `LLM_TIMEOUT_MS` | `60000` | 单次 LLM 请求超时（毫秒）。排查 `/match` 报 `timeout` 时可调大此值 |
-| `SEARCH_INDEX_PATH` | `/Users/h30072573/lib/search_index.json` | 共享索引文件路径（由 **lib-admin-service** 生成） |
+| `SEARCH_INDEX_PATH` | `~/lib/search_index.json` | 共享索引文件路径（由 **lib-admin-service** 生成） |
 
 > `.env` 已预置好上述所有项（`SEARCH_INDEX_PATH` 已配置为共享数据目录）。本地启动无需额外配置。
 
@@ -376,9 +376,9 @@ const matchResult = {
 };
 
 // 拼接完整路径
-const HEX_LIB_DIR = '/Users/h30072573/lib';  // 应指向共享数据目录
+const HEX_LIB_DIR = '~/lib';  // 应指向共享数据目录
 const hexPath = HEX_LIB_DIR + '/' + matchResult.path;
-// 结果：/Users/h30072573/lib/ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt
+// 结果：~/lib/ict-ui/component/9a9da828027b6bdc773731bb333817c0799c208d.txt
 
 // 读取 hex 文件
 const hexContent = fs.readFileSync(hexPath, 'utf8');

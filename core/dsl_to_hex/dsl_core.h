@@ -724,6 +724,7 @@ static uint32_t countLayerNodes(const DslLayer &layer, const TableTemplate *tmpl
             n += 1;  // .$Table-Column (checkbox)
             if (layer.tableData.showCheckbox) {
                 n += countTmplSubtree(tmpl->tmplCbHeader, tmpl->tmplPmap);
+                n += 1;  // body wrapper（clone 自 tmplBody）
                 n += (uint32_t)nRows * countTmplSubtree(tmpl->tmplCbBody, tmpl->tmplPmap);
             }
         }
@@ -1335,45 +1336,67 @@ static void fillTableNode(
                     n.set_stackCounterSizing(StackSize::FIXED);
                 }
             }
-            // header 子节点（原样递归克隆）
+            // header 子节点：高度锁 hdrH，宽度锁 cbColWidth，有 auto-layout 则强制 FIXED
             {
                 uint32_t cbHdrTmplS = tmpl.tmplCbHeader->guid()->sessionID() ? *tmpl.tmplCbHeader->guid()->sessionID() : 0;
                 uint32_t cbHdrTmplL = tmpl.tmplCbHeader->guid()->localID()   ? *tmpl.tmplCbHeader->guid()->localID()   : 0;
                 auto it = tmpl.tmplPmap.find(gkStr(cbHdrTmplS, cbHdrTmplL));
                 if (it != tmpl.tmplPmap.end()) {
                     int ci2 = 0;
-                    for (const PixsoNode *ch : it->second)
+                    for (const PixsoNode *ch : it->second) {
+                        uint32_t rootIdx = idx;
                         cloneTmplSubtree(pool, arr, idx, ch, cbHdrS, cbHdrL, ci2++,
-                                         tmpl.tmplPmap, gc, blobRemap);
+                                         tmpl.tmplPmap, gc, blobRemap,
+                                         kNO, kNO, tmpl.cbColWidth, hdrH);
+                        if (arr[rootIdx].stackMode()) {
+                            arr[rootIdx].set_stackPrimarySizing(StackSize::FIXED);
+                            arr[rootIdx].set_stackCounterSizing(StackSize::FIXED);
+                        }
+                    }
                 }
             }
-            // 每行一个 .$Table-Col-Body（高度 = rowH，y 与数据列 cell 对齐）
+            // body wrapper：clone 自 tmplBody，与数据列 $Table-Col-Body 结构对称，
+            // 继承其 padding/spacing，让 cbBody 行的 Y 坐标由 auto-layout 决定，
+            // 从而与数据列每行 cell 的绝对 Y 严格对齐。
+            auto [cbWrapS, cbWrapL] = nextGuid();
+            {
+                PixsoNode &n = arr[idx++];
+                cloneStructNode(pool, n, *tmpl.tmplBody,
+                                cbWrapS, cbWrapL,
+                                cbColS, cbColL, makePos(1),
+                                0.f, kNO,   // Y 由 cbColumn auto-layout 决定
+                                tmpl.cbColWidth, bodyH,
+                                blobRemap);
+            }
+            // 每行一个 .$Table-Col-Body，挂在 wrapper 下，Y 由 wrapper auto-layout 决定
             for (int ri = 0; ri < nRows; ri++) {
-                float cbBodyY = hdrH + padTop + (float)ri * (rowH + bodySpacing);
                 auto [cbBodyS, cbBodyL] = nextGuid();
                 {
                     PixsoNode &n = arr[idx++];
                     cloneStructNode(pool, n, *tmpl.tmplCbBody,
                                     cbBodyS, cbBodyL,
-                                    cbColS, cbColL, makePos(ri + 1),
-                                    0.f, cbBodyY,
+                                    cbWrapS, cbWrapL, makePos(ri),  // 父改为 wrapper
+                                    0.f, kNO,                        // Y 由 wrapper auto-layout 决定
                                     tmpl.cbColWidth, rowH,
                                     blobRemap);
-                    if (n.stackMode()) {
-                        n.set_stackPrimarySizing(StackSize::FIXED);
-                        n.set_stackCounterSizing(StackSize::FIXED);
-                    }
                 }
-                // body 子树（.表格子元素 + INSTANCE）递归克隆
+                // body 子树（.表格子元素 + INSTANCE）：高度锁 rowH，宽度锁 cbColWidth，有 auto-layout 则强制 FIXED
                 {
                     uint32_t cbBodyTmplS = tmpl.tmplCbBody->guid()->sessionID() ? *tmpl.tmplCbBody->guid()->sessionID() : 0;
                     uint32_t cbBodyTmplL = tmpl.tmplCbBody->guid()->localID()   ? *tmpl.tmplCbBody->guid()->localID()   : 0;
                     auto it = tmpl.tmplPmap.find(gkStr(cbBodyTmplS, cbBodyTmplL));
                     if (it != tmpl.tmplPmap.end()) {
                         int ki = 0;
-                        for (const PixsoNode *ch : it->second)
+                        for (const PixsoNode *ch : it->second) {
+                            uint32_t rootIdx = idx;
                             cloneTmplSubtree(pool, arr, idx, ch, cbBodyS, cbBodyL, ki++,
-                                             tmpl.tmplPmap, gc, blobRemap);
+                                             tmpl.tmplPmap, gc, blobRemap,
+                                             kNO, kNO, tmpl.cbColWidth, rowH);
+                            if (arr[rootIdx].stackMode()) {
+                                arr[rootIdx].set_stackPrimarySizing(StackSize::FIXED);
+                                arr[rootIdx].set_stackCounterSizing(StackSize::FIXED);
+                            }
+                        }
                     }
                 }
             }

@@ -44,7 +44,7 @@ const client = new OpenAI({
   timeout: TIMEOUT_MS,
 });
 
-const SEARCH_INDEX    = process.env.SEARCH_INDEX_PATH || '/Users/h30072573/lib/search_index.json';
+const SEARCH_INDEX    = process.env.SEARCH_INDEX_PATH || '~/lib/search_index.json';
 const CANONICAL_MAP_PATH = path.resolve(__dirname, 'canonical_map.json');
 
 // 把要打日志的对象序列化成字符串并截断，避免一条几万 token 的 prompt 把日志刷屏

@@ -37,7 +37,7 @@
 
 | 字段 | 类型 | 必选 | 说明 |
 |---|---|---|---|
-| `id` | string | 是 | 页面 GUID，格式 `"sessionID:localID"` |
+| `id` | string | 否 | 页面标识符，任意字符串，仅用于调试信息，不影响输出 |
 | `name` | string | 是 | 页面名称 |
 | `layers` | Layer[] | 是 | 根图层列表（递归嵌套） |
 
@@ -51,7 +51,7 @@
 
 | 字段 | 类型 | 必选 | 说明 |
 |---|---|---|---|
-| `id` | string | 是 | 节点 GUID，格式 `"sessionID:localID"` |
+| `id` | string | 否 | 节点标识符，任意字符串。节点 GUID 由转换器内部自动生成，`id` 不再参与 GUID 分配。**仅当图层含 `placeholder` 字段时需要提供**，用于资源文件命名（格式不限，但需在同一 DSL 内唯一）|
 | `name` | string | 是 | 节点名称 |
 | `type` | string | 是 | 节点类型，见 [LayerType](#layertype) |
 | `visible` | boolean | 是 | 是否可见 |
@@ -243,7 +243,7 @@ box.width 也为 0       → 使用模版默认列宽
 ### 约束
 
 - 表格图层**不含 `children` 字段**，单元格内容通过 `rows` 传入
-- 每格（cell）是一个完整的 `Layer`，其 `id` 字段作为该节点的 GUID 写入 hex
+- 每格（cell）是一个完整的 `Layer`，其节点 GUID 由转换器内部自动分配，`id` 字段可省略
 - 表格视觉风格完全由 `--table-template` 指定的 hex 文件控制；若未传入模版，表格节点将被替换为一个不可见的占位 FRAME
 - `show_checkbox: true` 时，表格左侧自动增加一列多选框，视觉样式由模版中的 `.$Table-Column`（无 Cell 后代）节点提供
 
@@ -612,7 +612,7 @@ box.width 也为 0       → 使用模版默认列宽
 |---|---|---|---|
 | `is_placeholder` | boolean | 是 | 是否为占位符 |
 | `replacement_type` | `"svg"` \| `"image"` | 是 | 替换类型：<br>• `"svg"` - 矢量 SVG 资源<br>• `"image"` - 图片资源 |
-| `note` | string | 否 | DSL 中存放原始 SVG 字符串或图片 base64 内容；`dsl-to-hex` 转换时会将其提取为独立资源文件并写入 zip，hex 中对应位置替换为文件名（格式 `{guid}.svg` / `{guid}.png`，guid = 图层 id 冒号替换为下划线）|
+| `note` | string | 否 | DSL 中存放原始 SVG 字符串或图片 base64 内容；`dsl-to-hex` 转换时会将其提取为独立资源文件并写入 zip，hex 中对应位置替换为文件名（格式 `{id}.svg` / `{id}.png`，其中 `id` 为图层的 `id` 字段值、冒号替换为下划线）。因此含 placeholder 的图层**必须提供 `id` 字段**，且同一 DSL 内唯一 |
 
 **pluginData 写入规则**：
 - 当图层包含 `placeholder` 字段时，解析器会将其写入 PixsoNode 的 pluginData 数组

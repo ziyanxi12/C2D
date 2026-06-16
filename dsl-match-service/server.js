@@ -29,7 +29,7 @@ const logger = createLogger({
   logDir: process.env.LOG_DIR
 });
 
-const SEARCH_INDEX_PATH = process.env.SEARCH_INDEX_PATH || '/Users/h30072573/lib/search_index.json';
+const SEARCH_INDEX_PATH = process.env.SEARCH_INDEX_PATH || '~/lib/search_index.json';
 
 app.use(express.json());
 

@@ -1,6 +1,12 @@
 # component-vector — 组件/图标向量检索服务
 
-基于 Elasticsearch KNN + DashScope Embedding 的语义检索服务，支持组件变体和图标两个库。
+基于 Elasticsearch KNN + Embedding API 的语义检索服务，支持组件变体和图标两个库。
+
+---
+
+## 环境要求
+
+- Python 3.8+
 
 ---
 
@@ -8,16 +14,156 @@
 
 ```
 component-vector/
-├── build_vector_index.js   # 构建组件变体向量索引
-├── build_icon_index.js     # 构建图标向量索引
-├── vector_search.js        # 组件检索模块（可作为库引入）
-├── icon_search.js          # 图标检索模块（可作为库引入）
-├── server.js               # HTTP API 服务
-├── es_client.js            # Elasticsearch 客户端
+├── build_vector_index.py   # 构建组件变体向量索引
+├── build_icon_index.py     # 构建图标向量索引
+├── vector_search.py        # 组件检索模块（可作为库引入）
+├── icon_search.py          # 图标检索模块（可作为库引入）
+├── server.py               # HTTP API 服务
+├── es_client.py            # Elasticsearch 客户端
+├── embed_client.py         # Embedding API 客户端
+├── config.py               # 配置管理
 ├── value_translations.json # 变体属性中英文翻译表
 ├── icons.json              # 图标数据
+├── requirements.txt        # Python 依赖
 ├── .env                    # 环境变量（需自行填写）
 └── .env.example            # 环境变量模板
+```
+
+---
+
+## 配置
+
+复制 `.env.example` 为 `.env` 并填写：
+
+```bash
+cp .env.example .env
+```
+
+关键配置项：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `DASHSCOPE_API_KEY` | — | Embedding API Key（必填） |
+| `EMBEDDING_BASE_URL` | — | Embedding API 地址 |
+| `EMBEDDING_MODEL` | `text-embedding-v3` | 模型名 |
+| `EMBEDDING_DIM` | `1024` | 向量维度，需与模型一致 |
+| `COMPONENT_INDEX_PATH` | `../component_index.json` | 组件库输入文件 |
+| `ICONS_PATH` | `./icons.json` | 图标库输入文件 |
+| `ES_URL` | `http://localhost:9200` | Elasticsearch 地址 |
+| `ES_USERNAME` | `elastic` | ES 用户名 |
+| `ES_PASSWORD` | — | ES 密码 |
+| `ES_INDEX` | `component_variants` | 组件 ES 索引名 |
+| `ICON_ES_INDEX` | `component_icons` | 图标 ES 索引名 |
+| `PORT` | `3100` | API 服务端口 |
+| `MOCK_EMBED` | — | 设为 `1` 使用随机向量（测试用） |
+| `REINDEX` | — | 设为 `1` 追加模式（不删除旧索引） |
+
+---
+
+## 执行步骤
+
+### 第一步：安装依赖
+
+```bash
+cd nodejs/component-vector
+pip install -r requirements.txt
+```
+
+### 第二步：生成向量并存入 ES
+
+**构建组件库索引：**
+
+```bash
+python build_vector_index.py
+```
+
+**构建图标库索引：**
+
+```bash
+python build_icon_index.py
+```
+
+构建过程：
+1. 读取原始数据（`component_index.json` 或 `icons.json`）
+2. 拼接 embedding 文本
+3. 调用 Embedding API 获取向量
+4. 批量写入 Elasticsearch
+
+> **Mock 模式**（不调用 Embedding API，用随机向量测试）：
+> ```bash
+> MOCK_EMBED=1 python build_vector_index.py
+> MOCK_EMBED=1 python build_icon_index.py
+> ```
+
+构建完成后会打印写入条数：
+```
+完成！ES 索引 component_variants 共 2847 条文档
+完成！ES 索引 component_icons 共 1003 条文档
+```
+
+### 第三步：查询
+
+#### 方式一：启动 HTTP 服务
+
+```bash
+python server.py
+```
+
+服务启动后监听 `http://localhost:3100`
+
+**查询组件变体（单个）：**
+```bash
+curl -X POST http://localhost:3100/api/search/component \
+  -H "Content-Type: application/json" \
+  -d '{"query": "主要按钮悬停状态", "topK": 3}'
+```
+
+**查询组件变体（批量）：**
+```bash
+curl -X POST http://localhost:3100/api/search/component/batch \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["主要按钮", "禁用状态", "输入框"], "topK": 3}'
+```
+
+**查询图标（单个）：**
+```bash
+curl -X POST http://localhost:3100/api/search/icon \
+  -H "Content-Type: application/json" \
+  -d '{"query": "下载文件", "topK": 5}'
+```
+
+**查询图标（批量）：**
+```bash
+curl -X POST http://localhost:3100/api/search/icon/batch \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["下载", "上传", "设置"], "topK": 5}'
+```
+
+#### 方式二：CLI 直接查询（无需启动服务）
+
+```bash
+# 组件检索
+python vector_search.py "主要按钮悬停" 3
+python vector_search.py "文字链接 禁用" 5
+
+# 图标检索
+python icon_search.py "下载文件" 5
+python icon_search.py "down icon" 5
+```
+
+#### 方式三：作为 Python 库引入
+
+```python
+from vector_search import search_variant, search_variant_batch
+from icon_search import search_icon, search_icon_batch
+
+# 单个查询
+results = search_variant("主要按钮悬停状态", top_k=3)
+results = search_icon("下载文件", top_k=5)
+
+# 批量查询
+results = search_variant_batch(["主要按钮", "禁用状态"], top_k=3)
+results = search_icon_batch(["下载", "上传", "设置"], top_k=5)
 ```
 
 ---
@@ -119,80 +265,9 @@ Embedding 文本 = `name + englishName + description`，拼接规则：
 
 ---
 
-## 配置
-
-复制 `.env.example` 为 `.env` 并填写：
-
-```bash
-cp .env.example .env
-```
-
-关键配置项：
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `DASHSCOPE_API_KEY` | — | DashScope API Key（必填） |
-| `EMBEDDING_BASE_URL` | DashScope 地址 | Embedding API 地址 |
-| `EMBEDDING_MODEL` | `text-embedding-v3` | 模型名 |
-| `EMBEDDING_DIM` | `1024` | 向量维度，需与模型一致 |
-| `COMPONENT_INDEX_PATH` | `../component_index.json` | 组件库输入文件 |
-| `ICONS_PATH` | `./icons.json` | 图标库输入文件 |
-| `ES_URL` | `http://localhost:9200` | Elasticsearch 地址 |
-| `ES_INDEX` | `component_variants` | 组件 ES 索引名 |
-| `ICON_ES_INDEX` | `component_icons` | 图标 ES 索引名 |
-| `PORT` | `3100` | API 服务端口 |
-
----
-
-## 执行步骤
-
-### 第一步：安装依赖
-
-```bash
-cd nodejs/component-vector
-npm install
-```
-
-### 第二步：构建向量索引
-
-**组件库：**
-
-```bash
-npm run build
-# 等价于：node build_vector_index.js
-```
-
-**图标库：**
-
-```bash
-npm run build-icons
-# 等价于：node build_icon_index.js
-```
-
-> **Mock 模式**（不调用 API，用随机向量，用于验证 ES 写入流程）：
-> ```bash
-> npm run build:mock
-> npm run build-icons:mock
-> ```
-
-构建完成后会打印写入条数：
-```
-完成！ES 索引 component_variants 共 2847 条文档
-完成！ES 索引 component_icons 共 1003 条文档
-```
-
-### 第三步：启动 API 服务
-
-```bash
-npm start
-# 等价于：node server.js
-```
-
----
-
 ## API 使用
 
-### 查询组件变体
+### 查询组件变体（单个）
 
 ```
 POST /api/search/component
@@ -212,13 +287,37 @@ Content-Type: application/json
       "variant_key": "d280a55acfe6b7d8bba7d3a2bdf4f538e1f94555",
       "component_set_key": "be1d28168c521684a3d888b60f9e8a645653b4b7",
       "component_set_resolved": true,
-      "path": "component/be1d28168c521684a3d888b60f9e8a645653b4b7.txt"
+      "path": "component/be1d28168c521684a3d888b60f9e8a645653b4b7.txt",
+      "name": "按钮",
+      "canvas_name": "1.基础类",
+      "variant_name": "type=primary, status=hover"
     }
   ]
 }
 ```
 
-### 查询图标
+### 查询组件变体（批量）
+
+```
+POST /api/search/component/batch
+Content-Type: application/json
+
+{ "queries": ["主要按钮", "禁用状态", "输入框"], "topK": 3 }
+```
+
+返回：
+
+```json
+{
+  "results": [
+    [/* 第一个 query 的 topK 结果 */],
+    [/* 第二个 query 的 topK 结果 */],
+    [/* 第三个 query 的 topK 结果 */]
+  ]
+}
+```
+
+### 查询图标（单个）
 
 ```
 POST /api/search/icon
@@ -236,24 +335,35 @@ Content-Type: application/json
       "score": 0.9731,
       "icon_id": "下载",
       "name": "下载",
+      "english_name": "download",
       "description": "下载图标，向下箭头带横线，用于文件下载、保存到本地等场景"
     }
   ]
 }
 ```
 
-> 支持中英文混合查询，如 `"button hover"` 、`"down icon"` 均可正常命中。
+### 查询图标（批量）
 
-### CLI 快速测试（无需启动服务）
-
-```bash
-# 组件检索
-node vector_search.js "主要按钮悬停" 3
-
-# 图标检索
-node icon_search.js "下载文件" 5
-node icon_search.js "down icon" 5
 ```
+POST /api/search/icon/batch
+Content-Type: application/json
+
+{ "queries": ["下载", "上传", "设置"], "topK": 5 }
+```
+
+返回：
+
+```json
+{
+  "results": [
+    [/* "下载" 的 topK 结果 */],
+    [/* "上传" 的 topK 结果 */],
+    [/* "设置" 的 topK 结果 */]
+  ]
+}
+```
+
+> 支持中英文混合查询，如 `"button hover"` 、`"down icon"` 均可正常命中。
 
 ---
 
@@ -270,7 +380,7 @@ node icon_search.js "down icon" 5
 **2. 追加写入**（不删除旧索引）：
 
 ```bash
-COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 node build_vector_index.js
+COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 python build_vector_index.py
 ```
 
 > `REINDEX=1` 表示不删除旧索引，只追加写入。
@@ -308,22 +418,22 @@ COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 node build_vector_index
 
 - **追加到同一索引**（与现有图标混在一起）：
   ```bash
-  ICONS_PATH=/path/to/chart_icons.json REINDEX=1 node build_icon_index.js
+  ICONS_PATH=/path/to/chart_icons.json REINDEX=1 python build_icon_index.py
   ```
 
 - **独立的新索引**（推荐，方便按库筛选）：
   ```bash
-  ICONS_PATH=/path/to/chart_icons.json ICON_ES_INDEX=chart_icons node build_icon_index.js
+  ICONS_PATH=/path/to/chart_icons.json ICON_ES_INDEX=chart_icons python build_icon_index.py
   ```
-  然后在 `server.js` 的 `ROUTES` 中新增对应的查询路由。
+  然后在 `server.py` 中新增对应的查询路由。
 
 ### 情况三：新库是全新格式
 
-1. 新建一个 `build_xxx_index.js`，参考 `build_icon_index.js` 的结构
+1. 新建一个 `build_xxx_index.py`，参考 `build_icon_index.py` 的结构
 2. 核心只需关注两件事：
    - **拼 embedding 文本**：把语义字段拼成自然语言句子
    - **决定 ES 字段**：需要查询返回哪些字段，在 mapping 和 `_source` 里声明
-3. 新建对应的 `xxx_search.js`，在 `server.js` 中注册路由
+3. 新建对应的 `xxx_search.py`，在 `server.py` 中注册路由
 
 ---
 
@@ -340,6 +450,9 @@ COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 node build_vector_index
 | `component_set_key` | `keyword` | 组件集的 key |
 | `component_set_resolved` | `boolean` | 固定为 true |
 | `path` | `keyword` | 对应渲染文件路径 |
+| `name` | `keyword` | 组件名称 |
+| `canvas_name` | `keyword` | 画布名称 |
+| `variant_name` | `keyword` | 变体名称 |
 
 ### component_icons（图标）
 
@@ -349,4 +462,115 @@ COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 node build_vector_index
 | `text` | `text` | embedding 原始文本（调试用） |
 | `icon_id` | `keyword` | 图标 id |
 | `name` | `keyword` | 图标名称 |
+| `english_name` | `keyword` | 图标英文名 |
 | `description` | `text` | 图标语义描述 |
+
+---
+
+## 删除 ES 索引
+
+### 方法一：Python 代码
+
+```python
+from es_client import delete_index, list_indices
+
+# 列出所有索引
+print(list_indices())
+
+# 删除指定索引
+delete_index('component_variants')
+delete_index('component_icons')
+```
+
+### 方法二：重新构建时自动删除
+
+默认情况下，运行构建脚本会先删除旧索引再重建：
+
+```bash
+python build_vector_index.py   # 会删除 component_variants 索引
+python build_icon_index.py     # 会删除 component_icons 索引
+```
+
+如果要保留旧数据并追加，使用 `REINDEX=1`：
+
+```bash
+REINDEX=1 python build_vector_index.py
+```
+
+### 方法三：curl 直接操作 ES
+
+```bash
+# 删除组件索引
+curl -X DELETE "http://localhost:9200/component_variants"
+
+# 删除图标索引
+curl -X DELETE "http://localhost:9200/component_icons"
+```
+
+---
+
+## Embedding API 调用说明
+
+本项目使用 `requests.post()` 调用 Embedding API 获取向量。
+
+### 调用方式
+
+```python
+import requests
+
+response = requests.post(
+    "https://your-embedding-api.com/embeddings",
+    headers={
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json",
+    },
+    json={
+        "model": "text-embedding-v3",
+        "input": ["文本1", "文本2"],
+        "dimensions": 1024,
+        "encoding_format": "float",
+    },
+    timeout=60,
+)
+result = response.json()
+vectors = [item["embedding"] for item in result["data"]]
+```
+
+### 请求参数
+
+| 参数 | 说明 |
+|------|------|
+| `model` | 模型名称，通过 `EMBEDDING_MODEL` 环境变量配置 |
+| `input` | 文本列表，单批最多 25 条 |
+| `dimensions` | 向量维度，通过 `EMBEDDING_DIM` 环境变量配置 |
+| `encoding_format` | 固定为 `float` |
+
+### 响应格式
+
+```json
+{
+  "data": [
+    { "index": 0, "embedding": [0.1, 0.2, ...] },
+    { "index": 1, "embedding": [0.3, 0.4, ...] }
+  ]
+}
+```
+
+### 批量处理
+
+当文本数量超过 25 条时，`embed_many()` 会自动分批调用：
+
+```python
+from embed_client import embed_many
+
+# 自动分批，每批 25 条
+vectors = embed_many(["文本1", "文本2", ..., "文本100"])
+```
+
+### Mock 模式
+
+测试时可设置 `MOCK_EMBED=1` 使用随机向量，不调用真实 API：
+
+```bash
+MOCK_EMBED=1 python build_vector_index.py
+```

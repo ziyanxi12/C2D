@@ -230,6 +230,17 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 | `headers` | (string \| Layer)[] | 是 | 列头描述列表，长度决定列数。元素为 `string` 时渲染为纯文本；为 `Layer` 时按图层类型渲染（支持 `text` / `frame` / `instance` 等），规则与单元格完全相同 |
 | `rows` | Layer[][] | 是 | 数据行列表，每行是一个 `Layer` 数组（每格一个完整图层，支持 text / frame / instance 等任意类型）|
 
+### 单元格对齐字段（rows 中每个 Layer 可选）
+
+以下两个字段写在单元格 Layer 的**顶层**（与 `type`、`name` 同级），控制 `.$Table-Cell` 容器的自动布局对齐。不填则完全沿用模版默认值。
+
+| 字段 | 类型 | 取值 | 说明 |
+|---|---|---|---|
+| `cell_align_h` | string | `"left"` / `"center"` / `"right"` | 水平对齐。映射到 `stackJustify`（水平布局）或 `stackCounterAlign`（垂直布局）|
+| `cell_align_v` | string | `"top"` / `"center"` / `"bottom"` | 垂直对齐。映射到 `stackCounterAlign`（水平布局）或 `stackJustify`（垂直布局）|
+
+> 注意：`cell_align_h/v` 控制的是 `.$Table-Cell` 容器的布局对齐（内容在格子内的位置），与 `text_style.align_h/v`（文字行在文本框内的对齐）语义不同，两者可独立配置。仅 `.$Table-Cell` 支持此覆盖，其他模版节点（`.$Table-Col-Header` 等）严格按模版样式输出。
+
 ### 尺寸优先级
 
 ```

@@ -406,6 +406,9 @@ struct DslLayer {
     std::string textAlignV        = "top";    // top / center / bottom
     float       textLetterSpacing = 0.0f;    // px，0 表示默认
     std::string textLineHeight    = "auto";  // "auto" 或 px 数字字符串
+    // $Table-Cell 自动布局对齐（仅在 table rows 上下文有效，空字符串表示跟随模板）
+    std::string cellAlignH;   // "left" / "center" / "right"
+    std::string cellAlignV;   // "top"  / "center" / "bottom"
     // PlaceholderMeta（公共字段，所有图层均可有）
     bool        placeholderEnabled = false;
     std::string placeholderType;   // instance / vector / image
@@ -570,6 +573,8 @@ static DslLayer parseLayer(const JVal &j) {
                              : std::to_string(lh.asFloat());
         }
     }
+    if (j.has("cell_align_h")) l.cellAlignH = j.get("cell_align_h").asStr();
+    if (j.has("cell_align_v")) l.cellAlignV = j.get("cell_align_v").asStr();
     return l;
 }
 
@@ -730,20 +735,24 @@ static uint32_t countLayerNodes(const DslLayer &layer, const TableTemplate *tmpl
         }
         uint32_t hdrChildCnt  = (uint32_t)tmpl->tmplHdrChildren.size();
         uint32_t cellChildCnt = (uint32_t)tmpl->tmplCellChildren.size();
+        // 富类型列头仍需克隆的非 TEXT 模版子节点数（如 RECT "bg"）
+        uint32_t hdrNonTextCnt = 0;
+        for (auto *c : tmpl->tmplHdrChildren)
+            if (!(c->type() && *c->type() == NodeType::TEXT)) hdrNonTextCnt++;
         for (int ci = 0; ci < nCols; ci++) {
             // $Table-Column + $Table-Col-Header + $Table-Col-Body
             n += 3;
-            // 列头：type 为空 → 模版子节点；否则 → 富类型 Layer 节点树
+            // 列头：type 为空 → 模版子节点；否则 → 非TEXT模版子节点 + 富类型 Layer 节点树
             const DslLayer &hdr = layer.tableData.headers[ci];
-            n += hdr.type.empty() ? hdrChildCnt : countLayerNodes(hdr, tmpl);
+            n += hdr.type.empty() ? hdrChildCnt : (hdrNonTextCnt + countLayerNodes(hdr, tmpl));
             // 每行格：$Table-Cell + 内容
             for (int ri = 0; ri < nRows; ri++) {
                 n += 1;  // $Table-Cell
                 const DslLayer *cell = (ri < nRows &&
                                         ci < (int)layer.tableData.rows[ri].size())
                                        ? &layer.tableData.rows[ri][ci] : nullptr;
-                // type 为空或 "text" → 模版子节点；否则 → 富类型 Layer 节点树
-                bool richCell = cell && !cell->type.empty() && cell->type != "text";
+                // type 为空 → 模版子节点；type 非空（含 "text"）→ DSL Layer 节点树
+                bool richCell = cell && !cell->type.empty();
                 n += richCell ? countLayerNodes(*cell, tmpl) : cellChildCnt;
             }
         }
@@ -1459,11 +1468,22 @@ static void fillTableNode(
         }
 
         if (isRichHdr) {
-            // 富类型表头：把 DSL Layer 整棵树写为 $Table-Col-Header 的子节点，
-            // 强制根节点尺寸 = colW × hdrH，并锁定为 FIXED 防止被 auto-layout 撑开
+            // 富类型表头：先克隆非 TEXT 模版子节点（如 RECT "bg"），保留背景；
+            // 再把 DSL Layer 整棵树追加为 $Table-Col-Header 的子节点。
+            int bgCount = 0;
+            for (int hi = 0; hi < (int)tmpl.tmplHdrChildren.size(); hi++) {
+                const PixsoNode *ch = tmpl.tmplHdrChildren[hi];
+                if (ch->type() && *ch->type() == NodeType::TEXT) continue;
+                auto [cS, cL] = nextGuid();
+                cloneStructNode(pool, arr[idx++], *ch, cS, cL,
+                                hdrS, hdrL, makePos(bgCount++),
+                                kNO, kNO,
+                                colW, hdrH,
+                                blobRemap);
+            }
             uint32_t richStart = idx;
             fillLayerNode(pool, arr, idx, hdrCell,
-                          hdrS, hdrL, 0,
+                          hdrS, hdrL, bgCount,
                           symMap, childMaps, gc, &tmpl, &blobRemap);
             if (idx > richStart) {
                 Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
@@ -1527,8 +1547,8 @@ static void fillTableNode(
                 (ri < (int)layer.tableData.rows.size() &&
                  ci < (int)layer.tableData.rows[ri].size())
                 ? &layer.tableData.rows[ri][ci] : nullptr;
-            // type 为空或 "text" → 模版子节点渲染；否则 → 富类型 Layer
-            bool isRichCell = pCell && !pCell->type.empty() && pCell->type != "text";
+            // type 为空 → 模版子节点渲染；type 非空（含 "text"）→ DSL Layer
+            bool isRichCell = pCell && !pCell->type.empty();
 
             // $Table-Cell：高度强制为 rowH，并锁定 auto-layout 为 FIXED，
             // 保证同行所有列的格子高度严格一致
@@ -1543,6 +1563,29 @@ static void fillTableNode(
                 if (n.stackMode()) {
                     n.set_stackPrimarySizing(StackSize::FIXED);
                     n.set_stackCounterSizing(StackSize::FIXED);
+                }
+                // DSL cell_align_h/v 覆盖 $Table-Cell 的自动布局对齐
+                if (pCell && (!pCell->cellAlignH.empty() || !pCell->cellAlignV.empty())) {
+                    bool isH = n.stackMode() && *n.stackMode() == StackMode::HORIZONTAL;
+                    bool isV = n.stackMode() && *n.stackMode() == StackMode::VERTICAL;
+                    if (isH || isV) {
+                        // 主轴对齐：水平布局→H，垂直布局→V
+                        const std::string &mainStr = isH ? pCell->cellAlignH : pCell->cellAlignV;
+                        if (!mainStr.empty()) {
+                            StackJustify sj = StackJustify::MIN;
+                            if      (mainStr == "center")               sj = StackJustify::CENTER;
+                            else if (mainStr == "right" || mainStr == "bottom") sj = StackJustify::MAX;
+                            n.set_stackJustify(sj);
+                        }
+                        // 交叉轴对齐：水平布局→V，垂直布局→H
+                        const std::string &crossStr = isH ? pCell->cellAlignV : pCell->cellAlignH;
+                        if (!crossStr.empty()) {
+                            StackCounterAlign ca = StackCounterAlign::MIN;
+                            if      (crossStr == "center")               ca = StackCounterAlign::CENTER;
+                            else if (crossStr == "bottom" || crossStr == "right") ca = StackCounterAlign::MAX;
+                            n.set_stackCounterAlign(ca);
+                        }
+                    }
                 }
             }
 

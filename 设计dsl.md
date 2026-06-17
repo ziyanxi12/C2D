@@ -223,7 +223,8 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 
 | 字段 | 类型 | 必选 | 说明 |
 |---|---|---|---|
-| `col_width` | number | 否 | 每列宽度（px）。为 `0` 时自动按 `box.width / 列数` 均分 |
+| `col_width` | number | 否 | 统一列宽（px）。为 `0` 时自动按 `box.width / 列数` 均分；`col_widths` 未指定的列使用此值 |
+| `col_widths` | number[] | 否 | 各列宽度数组（px），与 `headers` 一一对应。数组长度不足时，剩余列使用 `col_width` 或模版默认值 |
 | `row_height` | number | 否 | 数据行高（px）。为 `0` 时沿用模版默认值 |
 | `header_height` | number | 否 | 表头行高（px）。为 `0` 时沿用模版默认值 |
 | `show_checkbox` | boolean | 否 | 是否显示多选框列，默认 `false`。为 `true` 时表格左侧增加一列多选框（需表格模版支持）|
@@ -239,14 +240,16 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 | `cell_align_h` | string | `"left"` / `"center"` / `"right"` | 水平对齐。映射到 `stackJustify`（水平布局）或 `stackCounterAlign`（垂直布局）|
 | `cell_align_v` | string | `"top"` / `"center"` / `"bottom"` | 垂直对齐。映射到 `stackCounterAlign`（水平布局）或 `stackJustify`（垂直布局）|
 
-> 注意：`cell_align_h/v` 控制的是 `.$Table-Cell` 容器的布局对齐（内容在格子内的位置），与 `text_style.align_h/v`（文字行在文本框内的对齐）语义不同，两者可独立配置。仅 `.$Table-Cell` 支持此覆盖，其他模版节点（`.$Table-Col-Header` 等）严格按模版样式输出。
+> 注意：`cell_align_h/v` 控制的是容器（`.$Table-Cell` 或 `.$Table-Col-Header`）的布局对齐，即**内容节点在格子内的位置**，与 `text_style.align_h/v`（文字行在文本框内的对齐）语义不同，两者可独立配置。内容节点的实际尺寸由 DSL `box` 决定；若内容尺寸小于格子，`cell_align_h/v` 才能产生可见的定位效果。`headers` 中的列头 Layer 同样支持此字段。
 
 ### 尺寸优先级
 
 ```
-col_width > 0          → 使用 DSL 指定值
-col_width = 0          → box.width / 列数（自动均分）
-box.width 也为 0       → 使用模版默认列宽
+col_widths[ci] > 0        → 使用该列指定宽度
+col_widths 长度不足       → 剩余列使用 col_width
+col_width > 0            → 所有列统一宽度
+col_width = 0            → box.width / 列数（自动均分）
+box.width 也为 0         → 使用模版默认列宽
 ```
 
 `row_height` 和 `header_height` 同理，无法从 `box.height` 自动推算（因为行数不固定），为 `0` 时直接使用模版默认值。
@@ -272,7 +275,7 @@ box.width 也为 0       → 使用模版默认列宽
   "blend_mode": "normal",
   "box": { "x": 40, "y": 200, "width": 960, "height": 280 },
   "table": {
-    "col_width": 0,
+    "col_widths": [240, 160, 320, 240],
     "row_height": 48,
     "header_height": 48,
     "headers": ["应用名称", "状态", "版本号", "操作"],
@@ -374,7 +377,8 @@ box.width 也为 0       → 使用模版默认列宽
   "blend_mode": "normal",
   "box": { "x": 40, "y": 200, "width": 960, "height": 280 },
   "table": {
-    "col_width": 0,
+    "col_width": 150,
+    "col_widths": [100, 200],
     "row_height": 48,
     "header_height": 48,
     "show_checkbox": true,

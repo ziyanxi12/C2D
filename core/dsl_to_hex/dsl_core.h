@@ -367,7 +367,8 @@ struct DslTableData {
     // 列头：type 为空时表示纯文本（textContent 存字符串），否则为富类型 Layer
     std::vector<DslLayer>               headers;
     std::vector<std::vector<DslLayer>>  rows;     // 每格是完整 DslLayer
-    float colWidth     = 0.f;  // 0 = 用模版默认值
+    float colWidth     = 0.f;  // 统一列宽，0 = 用模版默认值
+    std::vector<float> colWidths;  // 各列宽度数组，长度不足的列使用 colWidth
     float rowHeight    = 0.f;
     float headerHeight = 0.f;
     bool  showCheckbox = false;  // 是否显示多选框列（默认不显示）
@@ -529,6 +530,11 @@ static DslLayer parseLayer(const JVal &j) {
     if (l.type == "table" && j.has("table")) {
         const JVal &t = j.get("table");
         if (t.has("col_width"))      l.tableData.colWidth     = t.get("col_width").asFloat();
+        if (t.has("col_widths")) {
+            const JVal &cws = t.get("col_widths");
+            for (size_t i = 0; i < cws.size(); i++)
+                l.tableData.colWidths.push_back(cws[i].asFloat());
+        }
         if (t.has("row_height"))     l.tableData.rowHeight    = t.get("row_height").asFloat();
         if (t.has("header_height"))  l.tableData.headerHeight = t.get("header_height").asFloat();
         if (t.has("show_checkbox"))  l.tableData.showCheckbox = t.get("show_checkbox").asBool();
@@ -1253,14 +1259,23 @@ static void fillTableNode(
     int nCols = (int)layer.tableData.headers.size();
     int nRows = (int)layer.tableData.rows.size();
 
-    // 尺寸优先级：DSL 显式值 > box.width 均分 > 模版默认值
-    float colW  = (layer.tableData.colWidth > 0)
-                    ? layer.tableData.colWidth
-                    : (nCols > 0 && layer.box.w > 0)
-                        ? layer.box.w / (float)nCols
-                        : tmpl.colWidth;
+    // 计算默认统一列宽：col_width > 0 → box.width 均分 → 模版默认值
+    float defaultColW = (layer.tableData.colWidth > 0)
+                        ? layer.tableData.colWidth
+                        : (nCols > 0 && layer.box.w > 0)
+                            ? layer.box.w / (float)nCols
+                            : tmpl.colWidth;
     float rowH  = (layer.tableData.rowHeight    > 0) ? layer.tableData.rowHeight    : tmpl.rowHeight;
     float hdrH  = (layer.tableData.headerHeight > 0) ? layer.tableData.headerHeight : tmpl.headerHeight;
+
+    // 计算各列实际宽度并累加总宽
+    std::vector<float> colWs(nCols);
+    float sumColW = 0.f;
+    for (int ci = 0; ci < nCols; ci++) {
+        colWs[ci] = (ci < (int)layer.tableData.colWidths.size() && layer.tableData.colWidths[ci] > 0)
+                    ? layer.tableData.colWidths[ci] : defaultColW;
+        sumColW += colWs[ci];
+    }
 
     // body 高度：读取模版 $Table-Col-Body 的 stackPaddingTop/Bottom
     float padTop    = (tmpl.tmplBody->stackPaddingTop()    ? *tmpl.tmplBody->stackPaddingTop()    : 0.f);
@@ -1283,7 +1298,7 @@ static void fillTableNode(
     // 仅在显示多选框时才占用宽度；隐藏时列节点仍写入但宽度为 0
     float cbColW = showCb ? tmpl.cbColWidth : 0.f;
 
-    float tableW  = cbColW + (float)nCols * colW;
+    float tableW  = cbColW + sumColW;
     float tableH  = colH + rootGap + rectH;
 
     auto nextGuid = [&]() { return gc.next(); };
@@ -1423,7 +1438,7 @@ static void fillTableNode(
                             tbS, tbL,
                             tableNS, tableNL, makePos(datParentBasePos),
                             cbColW, 0.f,
-                            (float)nCols * colW, colH,
+                            sumColW, colH,
                             blobRemap);
         }
         datParentS   = tbS;
@@ -1432,9 +1447,9 @@ static void fillTableNode(
     }
 
     // === 5. 每列（数据列）===
+    float colX = hasTB ? 0.f : cbColW;  // 起始 x 位置
     for (int ci = 0; ci < nCols; ci++) {
-        // x 相对于父节点：若有 .$Table-Body 则从 0 起；否则加 cbColW 偏移
-        float colX = hasTB ? (float)ci * colW : (cbColW + (float)ci * colW);
+        float colW = colWs[ci];
         const DslLayer &hdrCell = layer.tableData.headers[ci];
         bool isRichHdr = !hdrCell.type.empty();  // type 非空 → 富类型 Layer
 
@@ -1482,13 +1497,11 @@ static void fillTableNode(
                                 blobRemap);
             }
             uint32_t richStart = idx;
+            // 尺寸由 DSL box 决定，不强制覆盖；cell_align_h/v 通过容器 auto-layout 定位内容。
             fillLayerNode(pool, arr, idx, hdrCell,
                           hdrS, hdrL, bgCount,
                           symMap, childMaps, gc, &tmpl, &blobRemap);
             if (idx > richStart) {
-                Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
-                sz->set_x(colW); sz->set_y(hdrH);
-                arr[richStart].set_size(sz);
                 if (arr[richStart].stackMode()) {
                     arr[richStart].set_stackPrimarySizing(StackSize::FIXED);
                     arr[richStart].set_stackCounterSizing(StackSize::FIXED);
@@ -1590,16 +1603,13 @@ static void fillTableNode(
             }
 
             if (isRichCell) {
-                // 富类型单元格：把 DSL Layer 整棵树写为 $Table-Cell 的子节点，
-                // 强制根节点尺寸 = colW × rowH，并锁定为 FIXED 防止被 auto-layout 撑开
+                // 富类型单元格：把 DSL Layer 整棵树写为 $Table-Cell 的子节点。
+                // 尺寸由 DSL box 决定，不强制覆盖；cell_align_h/v 通过容器 auto-layout 定位内容。
                 uint32_t richStart = idx;
                 fillLayerNode(pool, arr, idx, *pCell,
                               cellS, cellL, 0,
                               symMap, childMaps, gc, &tmpl, &blobRemap);
                 if (idx > richStart) {
-                    Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
-                    sz->set_x(colW); sz->set_y(rowH);
-                    arr[richStart].set_size(sz);
                     if (arr[richStart].stackMode()) {
                         arr[richStart].set_stackPrimarySizing(StackSize::FIXED);
                         arr[richStart].set_stackCounterSizing(StackSize::FIXED);
@@ -1638,6 +1648,7 @@ static void fillTableNode(
                 }
             }
         }
+        colX += colW;  // 累加到下一列
     }
 
     // === 6. tmplRect（root 的第二子节点）===
@@ -2031,18 +2042,26 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         }
         // line_height → PixsoNode + styleOverrideTable[0]（非 auto 才写）
         if (layer.textLineHeight != "auto" && !layer.textLineHeight.empty()) {
-            float lhVal = std::stof(layer.textLineHeight);
-            Number *lh = pool.allocate<Number>(); new(lh) Number();
-            lh->set_value(lhVal);
-            lh->set_units(NumberUnits::PIXELS);
-            n.set_lineHeight(lh);
-            // 同步写入 styleOverrideTable（若已创建）
-            auto *tbl = n.textData() ? n.textData()->styleOverrideTable() : nullptr;
-            if (tbl && tbl->size() > 0) {
-                Number *lh2 = pool.allocate<Number>(); new(lh2) Number();
-                lh2->set_value(lhVal);
-                lh2->set_units(NumberUnits::PIXELS);
-                (*tbl)[0].set_lineHeight(lh2);
+            float lhVal = 0.f;
+            bool lhOk = false;
+            try { lhVal = std::stof(layer.textLineHeight); lhOk = (lhVal > 0.f); }
+            catch (...) {
+                fprintf(stderr, "  [WARN] 无效 line_height 值 \"%s\"，已跳过\n",
+                        layer.textLineHeight.c_str());
+            }
+            if (lhOk) {
+                Number *lh = pool.allocate<Number>(); new(lh) Number();
+                lh->set_value(lhVal);
+                lh->set_units(NumberUnits::PIXELS);
+                n.set_lineHeight(lh);
+                // 同步写入 styleOverrideTable（若已创建）
+                auto *tbl = n.textData() ? n.textData()->styleOverrideTable() : nullptr;
+                if (tbl && tbl->size() > 0) {
+                    Number *lh2 = pool.allocate<Number>(); new(lh2) Number();
+                    lh2->set_value(lhVal);
+                    lh2->set_units(NumberUnits::PIXELS);
+                    (*tbl)[0].set_lineHeight(lh2);
+                }
             }
         }
     }
@@ -2186,6 +2205,7 @@ static std::vector<uint8_t> buildMsg(
         }
     }
 
+    printf("  预期节点数: %u\n", total);
     PixsoMsg out;
     out.set_type(PixsoMsgType::FIC_DOCUMENT);
     auto &arr = out.set_pixsoNodes(pool, total);

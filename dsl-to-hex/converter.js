@@ -172,9 +172,9 @@ function buildZip(tmpDir, hexContent, placeholders) {
 
   const files = ['output.txt'];
   
-  for (const { id, type } of placeholders) {
+  for (const { id, ext } of placeholders) {
     const guid = idToGuid(id);
-    const fname = type === 'svg' ? `${guid}.svg` : `${guid}.png`;
+    const fname = `${guid}.${ext || 'png'}`;
     if (fs.existsSync(path.join(tmpDir, fname))) files.push(fname);
   }
 
@@ -238,16 +238,28 @@ async function convert(dsl, tableTemplateContent) {
     // placeholder svg/image 文件：{tmpDir}/{guid}.svg 或 {guid}.png
     const placeholders = extractPlaceholders(dsl);
     let svgCount = 0, pngCount = 0;
-    for (const { id, type, note } of placeholders) {
+    for (const ph of placeholders) {
+      const { id, type, note } = ph;
       const guid = idToGuid(id);
       if (type === 'svg') {
         fs.writeFileSync(path.join(tmpDir, `${guid}.svg`), note, 'utf8');
+        ph.ext = 'svg';
         svgCount++;
       } else {
-        // base64 → binary
-        const b64 = note.replace(/^data:image\/[^;]+;base64,/, '');
-        fs.writeFileSync(path.join(tmpDir, `${guid}.png`), Buffer.from(b64, 'base64'));
-        pngCount++;
+        // 根据 data URI MIME 类型决定写 svg 还是 png
+        const mimeMatch = note.match(/^data:image\/([^;]+);base64,/);
+        const mime = mimeMatch ? mimeMatch[1] : '';
+        const isSvg = mime === 'svg+xml';
+        const b64 = mimeMatch ? note.slice(mimeMatch[0].length) : note;
+        if (isSvg) {
+          fs.writeFileSync(path.join(tmpDir, `${guid}.svg`), Buffer.from(b64, 'base64'));
+          ph.ext = 'svg';
+          svgCount++;
+        } else {
+          fs.writeFileSync(path.join(tmpDir, `${guid}.png`), Buffer.from(b64, 'base64'));
+          ph.ext = 'png';
+          pngCount++;
+        }
       }
     }
     if (placeholders.length > 0) {

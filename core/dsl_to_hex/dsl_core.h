@@ -1856,8 +1856,17 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         for (char &c : guid) if (c == ':') c = '_';
         
         // note = 文件名（svg/png 文件在 zip 包中）
+        // image 类型需检查 note 内容的 MIME，与 converter.js 保持一致
         std::string noteFile = guid;
-        noteFile += (layer.placeholderType == "svg") ? ".svg" : ".png";
+        if (layer.placeholderType == "svg") {
+            noteFile += ".svg";
+        } else if (layer.placeholderType == "image") {
+            bool isSvg = (layer.placeholderNote.find("data:image/svg+xml") == 0) ||
+                         (layer.placeholderNote.find("<svg") == 0);
+            noteFile += isSvg ? ".svg" : ".png";
+        } else {
+            noteFile += ".png";
+        }
         
         // 构造 value JSON：{"is_placeholder":true,"replacement_type":"...","note":"..."}
         std::string val = "{\"is_placeholder\":true,\"replacement_type\":\"";

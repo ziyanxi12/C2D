@@ -1342,6 +1342,11 @@ static void fillTableNode(
                             showCb ? tmpl.cbColWidth : 0.f, colH,
                             blobRemap);
             n.set_visible(showCb);
+            n.set_stackPrimarySizing(StackSize::FIXED);
+            n.set_stackCounterSizing(StackSize::FIXED);
+            n.set_stackWidth(StackSize::FIXED);
+            n.set_stackChildPrimarySizing(StackSize::FIXED);
+            n.set_stackChildCounterSizing(StackSize::FIXED);
         }
 
         if (showCb) {
@@ -1463,6 +1468,11 @@ static void fillTableNode(
                             colX, 0.f,
                             colW, colH,
                             blobRemap);
+            n.set_stackPrimarySizing(StackSize::FIXED);
+            n.set_stackCounterSizing(StackSize::FIXED);
+            n.set_stackWidth(StackSize::FIXED);
+            n.set_stackChildPrimarySizing(StackSize::FIXED);
+            n.set_stackChildCounterSizing(StackSize::FIXED);
         }
 
         // $Table-Col-Header：高度强制为 hdrH，并锁定 auto-layout 为 FIXED，

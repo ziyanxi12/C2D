@@ -1,0 +1,76 @@
+{
+    "meta": {
+        "version": "1.0.0",
+        "source": "pixso",
+        "file_id": "test-cb-col-widths",
+        "file_name": "checkbox + col_widths 联合测试",
+        "created_at": "2026-06-17T00:00:00Z",
+        "updated_at": "2026-06-17T00:00:00Z"
+    },
+    "pages": [
+        {
+            "name": "页面1",
+            "layers": [
+                {
+                    "name": "服务列表",
+                    "type": "table",
+                    "visible": true,
+                    "opacity": 1,
+                    "blend_mode": "normal",
+                    "box": { "x": 40, "y": 40, "width": 860, "height": 200 },
+                    "table": {
+                        "col_width": 120,
+                        "col_widths": [200, 400],
+                        "row_height": 48,
+                        "header_height": 48,
+                        "show_checkbox": true,
+                        "headers": ["状态", "服务名称", "操作"],
+                        "rows": [
+                            [
+                                {
+                                    "name": "cell-status",
+                                    "type": "text",
+                                    "visible": true, "opacity": 1, "blend_mode": "normal",
+                                    "box": { "x": 0, "y": 0, "width": 200, "height": 48 },
+                                    "text_content": "运行中",
+                                    "text_style": {
+                                        "font_family": "PingFang SC", "font_style": "Regular",
+                                        "font_size": 14, "color": "#52C41AFF",
+                                        "letter_spacing": 0, "line_height": 48,
+                                        "align_h": "left", "align_v": "center"
+                                    }
+                                },
+                                {
+                                    "name": "cell-name",
+                                    "type": "text",
+                                    "visible": true, "opacity": 1, "blend_mode": "normal",
+                                    "box": { "x": 0, "y": 0, "width": 400, "height": 48 },
+                                    "text_content": "设计协作平台",
+                                    "text_style": {
+                                        "font_family": "PingFang SC", "font_style": "Regular",
+                                        "font_size": 14, "color": "#1E293BFF",
+                                        "letter_spacing": 0, "line_height": 48,
+                                        "align_h": "left", "align_v": "center"
+                                    }
+                                },
+                                {
+                                    "name": "cell-action",
+                                    "type": "text",
+                                    "visible": true, "opacity": 1, "blend_mode": "normal",
+                                    "box": { "x": 0, "y": 0, "width": 120, "height": 48 },
+                                    "text_content": "编辑",
+                                    "text_style": {
+                                        "font_family": "PingFang SC", "font_style": "Regular",
+                                        "font_size": 14, "color": "#1677FFFF",
+                                        "letter_spacing": 0, "line_height": 48,
+                                        "align_h": "left", "align_v": "center"
+                                    }
+                                }
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -24,6 +24,7 @@ ICON_ES_INDEX = os.environ.get('ICON_ES_INDEX', 'component_icons')
 
 COMPONENT_INDEX_PATH = _resolve('COMPONENT_INDEX_PATH', '../component_index.json')
 ICONS_PATH           = _resolve('ICONS_PATH', 'icons.json')
+DOMAINS_CONFIG_PATH  = str(Path(__file__).parent / 'domains.yaml')
 
 PORT    = int(os.environ.get('PORT', '3100'))
 REINDEX = os.environ.get('REINDEX', '').lower() in ('1', 'true', 'yes')

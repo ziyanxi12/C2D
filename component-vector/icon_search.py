@@ -31,7 +31,7 @@ def _hit_to_dict(hit: dict) -> dict:
     }
 
 
-def search_icon(query: str, top_k: int = 1) -> List[Dict]:
+def search_icon(query: str, top_k: int = 5) -> List[Dict]:
     es  = get_client()
     vec = embed_many([query])[0]
 
@@ -49,7 +49,7 @@ def search_icon(query: str, top_k: int = 1) -> List[Dict]:
     return [_hit_to_dict(h) for h in resp['hits']['hits']]
 
 
-def search_icon_batch(queries: List[str], top_k: int = 1) -> List[List[Dict]]:
+def search_icon_batch(queries: List[str], top_k: int = 5) -> List[List[Dict]]:
     if not queries:
         return []
     es   = get_client()

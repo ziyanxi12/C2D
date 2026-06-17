@@ -3,10 +3,20 @@
 构建组件变体向量索引，写入 Elasticsearch。
 
 用法：
-  python build_vector_index.py           # 真实 embedding API
-  MOCK_EMBED=1 python build_vector_index.py  # mock 随机向量
+  # 单领域构建
+  python build_vector_index.py --domain product-a --domain-name "产品A设计团队"
+  
+  # 指定数据文件
+  python build_vector_index.py --domain product-a --domain-name "产品A设计团队" --data ../product-a/component_index.json
+  
+  # 重建模式（删除旧数据）
+  python build_vector_index.py --domain product-a --rebuild
+  
+  # Mock 模式（随机向量）
+  MOCK_EMBED=1 python build_vector_index.py --domain product-a --domain-name "产品A设计团队"
 """
 
+import argparse
 import json
 import re
 import sys
@@ -15,15 +25,14 @@ from typing import Dict, List, Optional
 
 from config import (
     MOCK_MODE, EMBEDDING_BASE_URL, EMBEDDING_MODEL,
-    COMPONENT_INDEX_PATH, ES_INDEX, REINDEX, EMBEDDING_DIM,
+    COMPONENT_INDEX_PATH, ES_INDEX, EMBEDDING_DIM,
 )
 from es_client import get_client
 from embed_client import embed_many
 
-# ── 翻译表 ────────────────────────────────────────────────────────────────────
 
 _TRANS_PATH = Path(__file__).parent / 'value_translations.json'
-TRANSLATIONS: dict[str, str] = {
+TRANSLATIONS: Dict[str, str] = {
     k: v for k, v in json.loads(_TRANS_PATH.read_text()).items()
     if not k.startswith('_comment')
 }
@@ -81,9 +90,7 @@ def _build_text(entry: dict, variant: Optional[dict]) -> str:
     return ' '.join(filter(None, [name, canvas, tokens]))
 
 
-# ── 构建记录 ──────────────────────────────────────────────────────────────────
-
-def build_records(data: dict) -> List[Dict]:
+def build_records(data: dict, domain: str, domain_name: str) -> List[Dict]:
     records = []
 
     for entry in data.get('componentSets', []):
@@ -95,6 +102,8 @@ def build_records(data: dict) -> List[Dict]:
         if not variants:
             records.append({
                 'text':                   _build_text(entry, None),
+                'domain':                 domain,
+                'domain_name':            domain_name,
                 'symbol_id':              entry.get('guid') or entry.get('componentKey'),
                 'variant_key':            entry.get('componentKey'),
                 'component_set_key':      entry.get('componentKey'),
@@ -108,6 +117,8 @@ def build_records(data: dict) -> List[Dict]:
             for variant in variants:
                 records.append({
                     'text':                   _build_text(entry, variant),
+                    'domain':                 domain,
+                    'domain_name':            domain_name,
                     'symbol_id':              variant.get('guid'),
                     'variant_key':            variant.get('variantKey'),
                     'component_set_key':      entry.get('componentKey'),
@@ -121,6 +132,8 @@ def build_records(data: dict) -> List[Dict]:
     for entry in data.get('standaloneComponents', []):
         records.append({
             'text':                   _build_text(entry, None),
+            'domain':                 domain,
+            'domain_name':            domain_name,
             'symbol_id':              entry.get('guid') or entry.get('componentKey'),
             'variant_key':            entry.get('componentKey'),
             'component_set_key':      entry.get('componentKey'),
@@ -134,12 +147,12 @@ def build_records(data: dict) -> List[Dict]:
     return records
 
 
-# ── ES 操作 ───────────────────────────────────────────────────────────────────
-
 ES_MAPPING = {
     'properties': {
         'text':                   {'type': 'text'},
         'embedding':              {'type': 'dense_vector', 'dims': EMBEDDING_DIM, 'index': True, 'similarity': 'cosine'},
+        'domain':                 {'type': 'keyword'},
+        'domain_name':            {'type': 'keyword'},
         'symbol_id':              {'type': 'keyword'},
         'variant_key':            {'type': 'keyword'},
         'component_set_key':      {'type': 'keyword'},
@@ -152,11 +165,11 @@ ES_MAPPING = {
 }
 
 
-def ensure_index(es):
+def ensure_index(es, rebuild: bool = False):
     exists = es.indices.exists(index=ES_INDEX)
     if exists:
-        if REINDEX:
-            print(f'索引 {ES_INDEX} 已存在，追加模式（REINDEX=1）')
+        if not rebuild:
+            print(f'索引 {ES_INDEX} 已存在，追加模式')
             return
         print(f'删除旧索引 {ES_INDEX} ...')
         es.indices.delete(index=ES_INDEX)
@@ -175,10 +188,16 @@ def bulk_index(es, docs: List[Dict]):
         print(f'  ⚠ 本批有 {len(failed)} 条写入失败')
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
-
 def main():
+    parser = argparse.ArgumentParser(description='构建组件变体向量索引')
+    parser.add_argument('--domain', required=True, help='领域标识，如 product-a')
+    parser.add_argument('--domain-name', required=True, help='领域显示名称，如 "产品A设计团队"')
+    parser.add_argument('--data', default=None, help='数据文件路径，默认使用 COMPONENT_INDEX_PATH')
+    parser.add_argument('--rebuild', action='store_true', help='重建模式，删除旧数据')
+    args = parser.parse_args()
+
     print('[MOCK 模式] 使用随机向量' if MOCK_MODE else f'[真实模式] {EMBEDDING_BASE_URL} / {EMBEDDING_MODEL}')
+    print(f'领域: {args.domain} ({args.domain_name})')
 
     es = get_client()
     if not es.ping():
@@ -186,8 +205,9 @@ def main():
         sys.exit(1)
     print('ES 连接正常')
 
-    data    = json.loads(Path(COMPONENT_INDEX_PATH).read_text())
-    records = build_records(data)
+    data_path = args.data or COMPONENT_INDEX_PATH
+    data = json.loads(Path(data_path).read_text())
+    records = build_records(data, args.domain, args.domain_name)
     set_count = len(data.get('componentSets', [])) + len(data.get('standaloneComponents', []))
     print(f'共 {len(records)} 条记录（{set_count} 个组件/变体集）')
 
@@ -196,7 +216,7 @@ def main():
         print(f'[{i}] {r["text"][:100]}')
     print('...\n')
 
-    ensure_index(es)
+    ensure_index(es, args.rebuild)
 
     BATCH_SIZE = 25
     ES_BULK    = 200
@@ -222,7 +242,7 @@ def main():
 
     es.indices.refresh(index=ES_INDEX)
     count = es.count(index=ES_INDEX)['count']
-    print(f'\n完成！ES 索引 {ES_INDEX} 共 {count} 条文档')
+    print(f'\n完成！ES 索引 {ES_INDEX} 共 {count} 条文档（包含所有领域）')
 
 
 if __name__ == '__main__':

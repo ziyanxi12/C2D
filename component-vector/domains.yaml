@@ -1,0 +1,10 @@
+domains:
+  - id: product-a
+    name: 产品A设计团队
+    data_path: ../product-a/component_index.json
+  - id: product-b
+    name: 产品B设计团队
+    data_path: ../product-b/component_index.json
+  - id: product-c
+    name: 产品C设计团队
+    data_path: ../product-c/component_index.json

@@ -1,5 +1,6 @@
 from elasticsearch import Elasticsearch
-from config import ES_URL, ES_USERNAME, ES_PASSWORD
+from typing import Dict, List
+from config import ES_URL, ES_USERNAME, ES_PASSWORD, ES_INDEX
 
 _client = None
 
@@ -22,7 +23,29 @@ def delete_index(index_name: str) -> bool:
     print(f'索引 {index_name} 不存在')
     return False
 
-def list_indices() -> list[str]:
+def list_indices() -> List[str]:
     """列出所有 ES 索引名称。"""
     es = get_client()
     return list(es.indices.get(index='*').keys())
+
+def list_domains() -> List[Dict]:
+    """从 ES 索引中查询所有 domain 及其名称。"""
+    es = get_client()
+    if not es.indices.exists(index=ES_INDEX):
+        return []
+    resp = es.search(
+        index=ES_INDEX,
+        query={'match_all': {}},
+        aggs={
+            'domains': {
+                'terms': {'field': 'domain', 'size': 100},
+                'aggs': {'domain_name': {'terms': {'field': 'domain_name', 'size': 1}}}
+            }
+        },
+        size=0
+    )
+    domains = []
+    for bucket in resp['aggregations']['domains']['buckets']:
+        domain_name = bucket['domain_name']['buckets'][0]['key'] if bucket['domain_name']['buckets'] else ''
+        domains.append({'id': bucket['key'], 'name': domain_name})
+    return domains

@@ -1,6 +1,6 @@
 # component-vector — 组件/图标向量检索服务
 
-基于 Elasticsearch KNN + Embedding API 的语义检索服务，支持组件变体和图标两个库。
+基于 Elasticsearch KNN + Embedding API 的语义检索服务，支持组件变体和图标两个库，组件库支持多领域管理。
 
 ---
 
@@ -14,14 +14,16 @@
 
 ```
 component-vector/
-├── build_vector_index.py   # 构建组件变体向量索引
+├── build_vector_index.py   # 构建组件变体向量索引（支持领域）
+├── build_all_domains.py    # 一键构建所有领域
 ├── build_icon_index.py     # 构建图标向量索引
-├── vector_search.py        # 组件检索模块（可作为库引入）
-├── icon_search.py          # 图标检索模块（可作为库引入）
+├── vector_search.py        # 组件检索模块（支持领域过滤）
+├── icon_search.py          # 图标检索模块
 ├── server.py               # HTTP API 服务
 ├── es_client.py            # Elasticsearch 客户端
 ├── embed_client.py         # Embedding API 客户端
 ├── config.py               # 配置管理
+├── domains.yaml            # 领域配置文件
 ├── value_translations.json # 变体属性中英文翻译表
 ├── icons.json              # 图标数据
 ├── requirements.txt        # Python 依赖
@@ -47,8 +49,6 @@ cp .env.example .env
 | `EMBEDDING_BASE_URL` | — | Embedding API 地址 |
 | `EMBEDDING_MODEL` | `text-embedding-v3` | 模型名 |
 | `EMBEDDING_DIM` | `1024` | 向量维度，需与模型一致 |
-| `COMPONENT_INDEX_PATH` | `../component_index.json` | 组件库输入文件 |
-| `ICONS_PATH` | `./icons.json` | 图标库输入文件 |
 | `ES_URL` | `http://localhost:9200` | Elasticsearch 地址 |
 | `ES_USERNAME` | `elastic` | ES 用户名 |
 | `ES_PASSWORD` | — | ES 密码 |
@@ -56,7 +56,61 @@ cp .env.example .env
 | `ICON_ES_INDEX` | `component_icons` | 图标 ES 索引名 |
 | `PORT` | `3100` | API 服务端口 |
 | `MOCK_EMBED` | — | 设为 `1` 使用随机向量（测试用） |
-| `REINDEX` | — | 设为 `1` 追加模式（不删除旧索引） |
+
+---
+
+## 领域管理
+
+组件库支持多领域（不同产品线、不同设计团队），通过 `domains.yaml` 配置。
+
+### 配置领域
+
+编辑 `domains.yaml`：
+
+```yaml
+domains:
+  - id: product-a
+    name: 产品A设计团队
+    data_path: ../product-a/component_index.json
+  - id: product-b
+    name: 产品B设计团队
+    data_path: ../product-b/component_index.json
+  - id: product-c
+    name: 产品C设计团队
+    data_path: ../product-c/component_index.json
+```
+
+| 字段 | 说明 |
+|------|------|
+| `id` | 领域标识，用于查询过滤 |
+| `name` | 领域显示名称 |
+| `data_path` | 组件数据文件路径 |
+
+### 构建领域数据
+
+**单领域构建：**
+
+```bash
+python build_vector_index.py --domain product-a --domain-name "产品A设计团队"
+```
+
+**指定数据文件：**
+
+```bash
+python build_vector_index.py --domain product-a --domain-name "产品A设计团队" --data ../product-a/component_index.json
+```
+
+**重建模式（删除旧数据）：**
+
+```bash
+python build_vector_index.py --domain product-a --rebuild
+```
+
+**一键构建所有领域：**
+
+```bash
+python build_all_domains.py
+```
 
 ---
 
@@ -69,15 +123,26 @@ cd nodejs/component-vector
 pip install -r requirements.txt
 ```
 
-### 第二步：生成向量并存入 ES
+### 第二步：配置领域
 
-**构建组件库索引：**
+编辑 `domains.yaml`，添加你的产品线/设计团队配置。
+
+### 第三步：生成向量并存入 ES
+
+**构建组件库（所有领域）：**
 
 ```bash
-python build_vector_index.py
+python build_all_domains.py
 ```
 
-**构建图标库索引：**
+或**单领域构建：**
+
+```bash
+python build_vector_index.py --domain product-a --domain-name "产品A设计团队"
+python build_vector_index.py --domain product-b --domain-name "产品B设计团队"
+```
+
+**构建图标库：**
 
 ```bash
 python build_icon_index.py
@@ -91,17 +156,17 @@ python build_icon_index.py
 
 > **Mock 模式**（不调用 Embedding API，用随机向量测试）：
 > ```bash
-> MOCK_EMBED=1 python build_vector_index.py
+> MOCK_EMBED=1 python build_vector_index.py --domain product-a --domain-name "产品A设计团队"
 > MOCK_EMBED=1 python build_icon_index.py
 > ```
 
 构建完成后会打印写入条数：
 ```
-完成！ES 索引 component_variants 共 2847 条文档
+完成！ES 索引 component_variants 共 2847 条文档（包含所有领域）
 完成！ES 索引 component_icons 共 1003 条文档
 ```
 
-### 第三步：查询
+### 第四步：查询
 
 #### 方式一：启动 HTTP 服务
 
@@ -111,18 +176,30 @@ python server.py
 
 服务启动后监听 `http://localhost:3100`
 
-**查询组件变体（单个）：**
+**查询组件变体（跨领域）：**
 ```bash
 curl -X POST http://localhost:3100/api/search/component \
   -H "Content-Type: application/json" \
-  -d '{"query": "主要按钮悬停状态", "topK": 3}'
+  -d '{"query": "主要按钮", "topK": 5}'
 ```
 
-**查询组件变体（批量）：**
+**查询组件变体（指定领域）：**
+```bash
+curl -X POST http://localhost:3100/api/search/component \
+  -H "Content-Type: application/json" \
+  -d '{"query": "主要按钮", "topK": 5, "domain": "product-a"}'
+```
+
+**查询组件变体（批量 + 指定领域）：**
 ```bash
 curl -X POST http://localhost:3100/api/search/component/batch \
   -H "Content-Type: application/json" \
-  -d '{"queries": ["主要按钮", "禁用状态", "输入框"], "topK": 3}'
+  -d '{"queries": ["按钮", "输入框"], "topK": 3, "domain": "product-a"}'
+```
+
+**获取所有可用领域：**
+```bash
+curl http://localhost:3100/api/search/domains
 ```
 
 **查询图标（单个）：**
@@ -142,13 +219,14 @@ curl -X POST http://localhost:3100/api/search/icon/batch \
 #### 方式二：CLI 直接查询（无需启动服务）
 
 ```bash
-# 组件检索
-python vector_search.py "主要按钮悬停" 3
-python vector_search.py "文字链接 禁用" 5
+# 跨领域检索
+python vector_search.py "主要按钮" 5
+
+# 指定领域检索
+python vector_search.py "主要按钮" 5 --domain product-a
 
 # 图标检索
 python icon_search.py "下载文件" 5
-python icon_search.py "down icon" 5
 ```
 
 #### 方式三：作为 Python 库引入
@@ -156,14 +234,19 @@ python icon_search.py "down icon" 5
 ```python
 from vector_search import search_variant, search_variant_batch
 from icon_search import search_icon, search_icon_batch
+from es_client import list_domains
 
-# 单个查询
-results = search_variant("主要按钮悬停状态", top_k=3)
-results = search_icon("下载文件", top_k=5)
+# 跨领域查询
+results = search_variant("主要按钮", top_k=5)
 
-# 批量查询
-results = search_variant_batch(["主要按钮", "禁用状态"], top_k=3)
-results = search_icon_batch(["下载", "上传", "设置"], top_k=5)
+# 指定领域查询
+results = search_variant("主要按钮", top_k=5, domain="product-a")
+
+# 批量查询（指定领域）
+results = search_variant_batch(["按钮", "输入框"], top_k=3, domain="product-a")
+
+# 获取所有领域
+domains = list_domains()
 ```
 
 ---
@@ -256,13 +339,6 @@ Embedding 文本 = `name + englishName + description`，拼接规则：
 | description | 下载图标，向下箭头... | 下载图标，向下箭头... |
 | **→ embedding** | | **下载 download 下载图标，向下箭头...** |
 
-| 字段 | 值 | 写入文本 |
-|------|-----|---------|
-| name | 术语问答 | 术语问答 |
-| englishName | ic_it_terminology_qa | it terminology qa |
-| description | terminologyQA | terminology QA |
-| **→ embedding** | | **术语问答 it terminology qa terminology QA** |
-
 ---
 
 ## API 使用
@@ -273,8 +349,14 @@ Embedding 文本 = `name + englishName + description`，拼接规则：
 POST /api/search/component
 Content-Type: application/json
 
-{ "query": "主要按钮悬停状态", "topK": 3 }
+{ "query": "主要按钮悬停状态", "topK": 3, "domain": "product-a" }
 ```
+
+| 参数 | 说明 |
+|------|------|
+| `query` | 查询文本（必填） |
+| `topK` | 返回数量（默认 1） |
+| `domain` | 指定领域（可选，不填则跨领域搜索） |
 
 返回：
 
@@ -283,6 +365,8 @@ Content-Type: application/json
   "results": [
     {
       "score": 0.9412,
+      "domain": "product-a",
+      "domain_name": "产品A设计团队",
       "symbol_id": "8229:277418",
       "variant_key": "d280a55acfe6b7d8bba7d3a2bdf4f538e1f94555",
       "component_set_key": "be1d28168c521684a3d888b60f9e8a645653b4b7",
@@ -291,6 +375,13 @@ Content-Type: application/json
       "name": "按钮",
       "canvas_name": "1.基础类",
       "variant_name": "type=primary, status=hover"
+    },
+    {
+      "score": 0.89,
+      "domain": "product-b",
+      "domain_name": "产品B设计团队",
+      "name": "按钮",
+      ...
     }
   ]
 }
@@ -302,7 +393,7 @@ Content-Type: application/json
 POST /api/search/component/batch
 Content-Type: application/json
 
-{ "queries": ["主要按钮", "禁用状态", "输入框"], "topK": 3 }
+{ "queries": ["主要按钮", "禁用状态", "输入框"], "topK": 3, "domain": "product-a" }
 ```
 
 返回：
@@ -313,6 +404,24 @@ Content-Type: application/json
     [/* 第一个 query 的 topK 结果 */],
     [/* 第二个 query 的 topK 结果 */],
     [/* 第三个 query 的 topK 结果 */]
+  ]
+}
+```
+
+### 获取所有领域
+
+```
+GET /api/search/domains
+```
+
+返回：
+
+```json
+{
+  "domains": [
+    { "id": "product-a", "name": "产品A设计团队" },
+    { "id": "product-b", "name": "产品B设计团队" },
+    { "id": "product-c", "name": "产品C设计团队" }
   ]
 }
 ```
@@ -351,89 +460,40 @@ Content-Type: application/json
 { "queries": ["下载", "上传", "设置"], "topK": 5 }
 ```
 
-返回：
-
-```json
-{
-  "results": [
-    [/* "下载" 的 topK 结果 */],
-    [/* "上传" 的 topK 结果 */],
-    [/* "设置" 的 topK 结果 */]
-  ]
-}
-```
-
 > 支持中英文混合查询，如 `"button hover"` 、`"down icon"` 均可正常命中。
 
 ---
 
-## 新增一个库
+## 新增领域
 
-以"新增一套图表组件库"为例，说明完整流程。
+新增一个产品线/设计团队的组件库：
 
-### 情况一：新库是「组件变体」类型（有 variants）
+**1. 准备数据文件**
 
-数据格式与 `component_index.json` 相同，追加写入同一个 ES 索引即可。
+格式与 `component_index.json` 一致。
 
-**1. 准备数据文件**，格式与 `component_index.json` 一致。
+**2. 在 `domains.yaml` 中添加配置**
 
-**2. 追加写入**（不删除旧索引）：
+```yaml
+domains:
+  - id: new-product
+    name: 新产品设计团队
+    data_path: ../new-product/component_index.json
+```
+
+**3. 构建**
 
 ```bash
-COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 python build_vector_index.py
+python build_vector_index.py --domain new-product --domain-name "新产品设计团队" --data ../new-product/component_index.json
 ```
 
-> `REINDEX=1` 表示不删除旧索引，只追加写入。
+或一键构建所有领域：
 
-**3. 如果变体属性有新的英文值需要翻译**，在 `value_translations.json` 中补充：
-
-```json
-{
-  "chartType=line":  "折线图 line chart",
-  "chartType=bar":   "柱状图 bar chart",
-  "chartType=pie":   "饼图 pie chart"
-}
+```bash
+python build_all_domains.py
 ```
 
-格式规则：
-- `key=value` → 精确匹配（优先）
-- `value` → 任意 key 下的该值（通用匹配）
-- value 部分填中文同义词，空格分隔
-
-### 情况二：新库是「图标」类型（只有 id/name/description）
-
-**1. 准备数据文件**，格式与 `icons.json` 一致：
-
-```json
-[
-  {
-    "id": "chart-line",
-    "name": "折线图",
-    "description": "折线图图标，用于展示数据趋势..."
-  }
-]
-```
-
-**2. 选择处理方式：**
-
-- **追加到同一索引**（与现有图标混在一起）：
-  ```bash
-  ICONS_PATH=/path/to/chart_icons.json REINDEX=1 python build_icon_index.py
-  ```
-
-- **独立的新索引**（推荐，方便按库筛选）：
-  ```bash
-  ICONS_PATH=/path/to/chart_icons.json ICON_ES_INDEX=chart_icons python build_icon_index.py
-  ```
-  然后在 `server.py` 中新增对应的查询路由。
-
-### 情况三：新库是全新格式
-
-1. 新建一个 `build_xxx_index.py`，参考 `build_icon_index.py` 的结构
-2. 核心只需关注两件事：
-   - **拼 embedding 文本**：把语义字段拼成自然语言句子
-   - **决定 ES 字段**：需要查询返回哪些字段，在 mapping 和 `_source` 里声明
-3. 新建对应的 `xxx_search.py`，在 `server.py` 中注册路由
+> 如果变体属性有新的英文值需要翻译，在 `value_translations.json` 中补充。
 
 ---
 
@@ -445,6 +505,8 @@ COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 python build_vector_ind
 |------|------|------|
 | `embedding` | `dense_vector` | 向量（1024维） |
 | `text` | `text` | embedding 原始文本（调试用） |
+| `domain` | `keyword` | 领域标识 |
+| `domain_name` | `keyword` | 领域显示名称 |
 | `symbol_id` | `keyword` | 变体的 guid |
 | `variant_key` | `keyword` | 变体的 key |
 | `component_set_key` | `keyword` | 组件集的 key |
@@ -472,29 +534,25 @@ COMPONENT_INDEX_PATH=/path/to/chart_index.json REINDEX=1 python build_vector_ind
 ### 方法一：Python 代码
 
 ```python
-from es_client import delete_index, list_indices
+from es_client import delete_index, list_indices, list_domains
 
 # 列出所有索引
 print(list_indices())
+
+# 列出所有领域
+print(list_domains())
 
 # 删除指定索引
 delete_index('component_variants')
 delete_index('component_icons')
 ```
 
-### 方法二：重新构建时自动删除
+### 方法二：重建模式
 
-默认情况下，运行构建脚本会先删除旧索引再重建：
-
-```bash
-python build_vector_index.py   # 会删除 component_variants 索引
-python build_icon_index.py     # 会删除 component_icons 索引
-```
-
-如果要保留旧数据并追加，使用 `REINDEX=1`：
+构建时使用 `--rebuild` 删除旧数据：
 
 ```bash
-REINDEX=1 python build_vector_index.py
+python build_vector_index.py --domain product-a --rebuild
 ```
 
 ### 方法三：curl 直接操作 ES
@@ -572,5 +630,4 @@ vectors = embed_many(["文本1", "文本2", ..., "文本100"])
 测试时可设置 `MOCK_EMBED=1` 使用随机向量，不调用真实 API：
 
 ```bash
-MOCK_EMBED=1 python build_vector_index.py
-```
+MOCK_EMBED=1 python build_vector_index.py --domain product-a --domain-name "产品A设计团队"

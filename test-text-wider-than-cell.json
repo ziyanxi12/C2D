@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "source": "pixso",
+    "file_id": "test-text-wider",
+    "file_name": "text宽度大于单元格测试",
+    "created_at": "2026-06-18T00:00:00Z",
+    "updated_at": "2026-06-18T00:00:00Z"
+  },
+  "pages": [
+    {
+      "name": "页面1",
+      "layers": [
+        {
+          "name": "测试表格",
+          "type": "table",
+          "visible": true,
+          "opacity": 1,
+          "blend_mode": "normal",
+          "box": { "x": 40, "y": 40, "width": 500, "height": 200 },
+          "table": {
+            "col_width": 100,
+            "col_widths": [150, 250],
+            "row_height": 48,
+            "header_height": 48,
+            "headers": ["姓名", "邮箱"],
+            "rows": [
+              [
+                {
+                  "name": "cell-name", "type": "text",
+                  "visible": true, "opacity": 1, "blend_mode": "normal",
+                  "box": { "x": 0, "y": 0, "width": 300, "height": 48 },
+                  "text_content": "张三",
+                  "text_style": {
+                    "font_family": "PingFang SC", "font_style": "Regular",
+                    "font_size": 14, "color": "#1E293BFF",
+                    "letter_spacing": 0, "line_height": 48,
+                    "align_h": "left", "align_v": "center"
+                  }
+                },
+                {
+                  "name": "cell-email", "type": "text",
+                  "visible": true, "opacity": 1, "blend_mode": "normal",
+                  "box": { "x": 0, "y": 0, "width": 500, "height": 48 },
+                  "text_content": "zhangsan@example.com",
+                  "text_style": {
+                    "font_family": "PingFang SC", "font_style": "Regular",
+                    "font_size": 14, "color": "#595959FF",
+                    "letter_spacing": 0, "line_height": 48,
+                    "align_h": "left", "align_v": "center"
+                  }
+                }
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -67,6 +67,17 @@ function collectHexRefs(layer, out) {
     const inst = layer.instance;
     const key = inst && inst.component_set_key;
     if (key && !out.has(key)) out.set(key, inst.path || null);
+    // variant_props 里的 instance 值也需要加载对应组件集
+    const vp = inst && inst.variant_props;
+    if (vp && typeof vp === 'object') {
+      for (const val of Object.values(vp)) {
+        if (val && typeof val === 'object' && val.type === 'instance') {
+          const inner = val.instance;
+          const vpKey = inner && inner.component_set_key;
+          if (vpKey && !out.has(vpKey)) out.set(vpKey, inner.path || null);
+        }
+      }
+    }
     return; // instance 不含 children
   }
   for (const child of layer.children || []) {

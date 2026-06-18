@@ -98,8 +98,47 @@
 | `component_set_key` | string | 是 | 所属组件集的 `componentKey`；若该组件无父组件集，则与 `variant_key` 相同 |
 | `component_set_resolved` | boolean | 是 | 本地库是否已成功解析该组件集，默认为 `true`。`false` 表示组件集 key 存在但对应库文件当前不可用，`dsl-to-hex` 转换时将降级处理 |
 | `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
-| `variant_props` | object | 否 | 变体属性键值对；key 格式由组件库定义，可为中文或英文，如 `{"status": "primary", "size": "normal"}` 或 `{"状态": "Pressed", "尺寸": "Medium"}` |
+| `variant_props` | object | 否 | 变体属性键值对；key 格式由组件库定义，可为中文或英文。value 可为普通类型（string / boolean / number）或 instance 节点对象（见下方说明）|
 | `overrides` | InstanceOverride[] | 否 | 实例级属性覆写列表 |
+
+### variant_props value 类型
+
+`variant_props` 的每个 value 支持两种形式：
+
+**普通值**：string / boolean / number，直接描述变体属性。
+
+```json
+"variant_props": { "status": "primary", "disabled": false, "count": 3 }
+```
+
+**instance 节点**：value 为一个完整的 InstanceLayer 结构（含 `type: "instance"` 和 `instance` 子对象），表示该属性的值本身是一个组件实例。`dsl-to-hex` 转换时会加载该 instance 对应的组件集 hex 数据（节点写入最终 hex），但**不会**为其创建 INSTANCE PixsoNode。
+
+```json
+"variant_props": {
+  "label": "确认",
+  "icon": {
+    "type": "instance",
+    "instance": {
+      "symbol_id": "200:1",
+      "variant_key": "abc123def456",
+      "component_set_key": "icon_csk",
+      "component_set_resolved": true,
+      "path": "ICT_UI/component/icon_csk.txt"
+    }
+  }
+}
+```
+
+**pluginData 写入规则**：
+- 当实例图层包含 `variant_props` 字段时，转换器会将其写入该 InstanceLayer 对应 PixsoNode 的 pluginData
+- pluginID：`"pix-dsl"`
+- key：`"variant_props"`
+- value：JSON 字符串，普通值原样序列化，instance 节点只保留 `variant_key`
+
+```json
+// 上例对应的 pluginData value：
+{"label":"确认","icon":{"variant_key":"abc123def456"}}
+```
 
 ### InstanceOverride
 

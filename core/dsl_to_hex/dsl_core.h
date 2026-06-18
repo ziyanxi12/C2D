@@ -374,6 +374,15 @@ struct DslTableData {
     bool  showCheckbox = false;  // 是否显示多选框列（默认不显示）
 };
 
+struct DslVariantProp {
+    std::string key;
+    bool        isInstance = false;
+    std::string jsonVal;           // 预序列化的 JSON 片段（含引号或 {...}）
+    // 仅 isInstance=true 时有效，供 collectCompSetKeys 加载 hex 用
+    std::string componentSetKey;
+    std::string path;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 struct DslLayer {
     std::string id, name, type;
@@ -396,7 +405,8 @@ struct DslLayer {
     // instance 字段
     std::string symbolId, variantKey, componentSetKey;
     bool        componentSetResolved = true;  // 组件集是否可解析（默认true）
-    std::vector<DslOverride> overrides;
+    std::vector<DslOverride>    overrides;
+    std::vector<DslVariantProp> variantProps;
     // text 字段
     std::string textContent;
     std::string textFontFamily = "PingFang SC";
@@ -524,6 +534,53 @@ static DslLayer parseLayer(const JVal &j) {
                 if (ov.has("value"))   dov.value  = ov.get("value").asStr();
                 if (!dov.nodeId.empty() && !dov.field.empty())
                     l.overrides.push_back(std::move(dov));
+            }
+        }
+        if (inst.has("variant_props")) {
+            const JVal &vp = inst.get("variant_props");
+            if (vp.type == JVal::Obj) {
+                for (const auto &kv : vp.obj) {
+                    DslVariantProp prop;
+                    prop.key = kv.first;
+                    const JVal &val = kv.second;
+                    if (val.type == JVal::Obj &&
+                        val.has("type") && val.get("type").asStr() == "instance") {
+                        // instance 节点：只保留 variant_key
+                        prop.isInstance = true;
+                        const JVal &inner = val.has("instance") ? val.get("instance") : val;
+                        std::string vk = inner.has("variant_key") ? inner.get("variant_key").asStr() : "";
+                        prop.componentSetKey = inner.has("component_set_key") ? inner.get("component_set_key").asStr() : "";
+                        prop.path = inner.has("path") ? inner.get("path").asStr() : "";
+                        prop.jsonVal = "{\"variant_key\":\"" + vk + "\"}";
+                    } else {
+                        // 普通值：直接序列化为 JSON 片段
+                        prop.isInstance = false;
+                        if (val.type == JVal::Bool) {
+                            prop.jsonVal = val.b ? "true" : "false";
+                        } else if (val.type == JVal::Int) {
+                            prop.jsonVal = std::to_string(val.i);
+                        } else if (val.type == JVal::Dbl) {
+                            char buf[64];
+                            snprintf(buf, sizeof(buf), "%g", val.d);
+                            prop.jsonVal = buf;
+                        } else if (val.type == JVal::Str) {
+                            std::string out = "\"";
+                            for (char c : val.s) {
+                                if      (c == '"')  out += "\\\"";
+                                else if (c == '\\') out += "\\\\";
+                                else if (c == '\n') out += "\\n";
+                                else if (c == '\r') out += "\\r";
+                                else if (c == '\t') out += "\\t";
+                                else                out += c;
+                            }
+                            out += "\"";
+                            prop.jsonVal = std::move(out);
+                        } else {
+                            prop.jsonVal = "null";
+                        }
+                    }
+                    l.variantProps.push_back(std::move(prop));
+                }
             }
         }
     }
@@ -1685,6 +1742,57 @@ static void fillTableNode(
 }
 
 // =============================================================================
+// variant_props 辅助：JSON 序列化 + pluginData 追加
+// =============================================================================
+
+static std::string buildVariantPropsJson(const std::vector<DslVariantProp> &props) {
+    auto escapeKey = [](const std::string &s) -> std::string {
+        std::string out;
+        for (char c : s) {
+            if      (c == '"')  out += "\\\"";
+            else if (c == '\\') out += "\\\\";
+            else                out += c;
+        }
+        return out;
+    };
+    std::string json = "{";
+    bool first = true;
+    for (const auto &p : props) {
+        if (!first) json += ",";
+        first = false;
+        json += "\"" + escapeKey(p.key) + "\":";
+        json += p.jsonVal;
+    }
+    json += "}";
+    return json;
+}
+
+// 向节点追加一条 pluginData，不覆盖已有条目
+static void appendPluginData(kiwi::MemoryPool &pool, PixsoNode &n,
+                             const char *pluginID, const char *key, const char *value) {
+    // 先把已有条目的字符串拷出来（pool 内存不会释放，c_str() 指针一直有效）
+    std::vector<std::tuple<std::string, std::string, std::string>> saved;
+    if (n.pluginData()) {
+        for (uint32_t i = 0; i < n.pluginData()->size(); i++) {
+            const PluginData &pd = (*n.pluginData())[i];
+            saved.emplace_back(
+                pd.pluginID() ? pd.pluginID()->c_str() : "",
+                pd.key()      ? pd.key()->c_str()      : "",
+                pd.value()    ? pd.value()->c_str()    : "");
+        }
+    }
+    auto &pd = n.set_pluginData(pool, (uint32_t)saved.size() + 1);
+    for (uint32_t i = 0; i < (uint32_t)saved.size(); i++) {
+        pd[i].set_pluginID(pool.string(std::get<0>(saved[i]).c_str()));
+        pd[i].set_key     (pool.string(std::get<1>(saved[i]).c_str()));
+        pd[i].set_value   (pool.string(std::get<2>(saved[i]).c_str()));
+    }
+    pd[saved.size()].set_pluginID(pool.string(pluginID));
+    pd[saved.size()].set_key     (pool.string(key));
+    pd[saved.size()].set_value   (pool.string(value));
+}
+
+// =============================================================================
 // DSL 图层 → PixsoNode（写入预分配数组）
 // =============================================================================
 
@@ -1833,6 +1941,12 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                     fillDerivedSlots(pool, dsd, dsdIdx, *symNode, cmIt->second, path);
                 }
             }
+        }
+
+        // variant_props → pluginData（追加，不覆盖已有条目）
+        if (!layer.variantProps.empty()) {
+            std::string vpJson = buildVariantPropsJson(layer.variantProps);
+            appendPluginData(pool, n, "pix-dsl", "variant_props", vpJson.c_str());
         }
         return;
     }
@@ -2117,8 +2231,14 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
 // =============================================================================
 
 static void collectCompSetKeys(const DslLayer &layer, std::set<std::string> &keys) {
-    if (layer.type == "instance" && !layer.componentSetKey.empty())
-        keys.insert(layer.componentSetKey);
+    if (layer.type == "instance") {
+        if (!layer.componentSetKey.empty())
+            keys.insert(layer.componentSetKey);
+        // variant_props 里的 instance 值也需要加载对应组件集
+        for (const auto &vp : layer.variantProps)
+            if (vp.isInstance && !vp.componentSetKey.empty())
+                keys.insert(vp.componentSetKey);
+    }
     for (auto &child : layer.children)
         collectCompSetKeys(child, keys);
     // 遍历表格的富类型列头和单元格中的实例

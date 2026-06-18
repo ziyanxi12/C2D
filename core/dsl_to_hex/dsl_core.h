@@ -1599,6 +1599,11 @@ static void fillTableNode(
                             if      (mainStr == "center")               sj = StackJustify::CENTER;
                             else if (mainStr == "right" || mainStr == "bottom") sj = StackJustify::MAX;
                             n.set_stackJustify(sj);
+
+                            StackAlignItemMode paim = StackAlignItemMode::MIN;
+                            if      (mainStr == "center")               paim = StackAlignItemMode::CENTER;
+                            else if (mainStr == "right" || mainStr == "bottom") paim = StackAlignItemMode::MAX;
+                            n.set_stackPrimaryAlignItems(paim);
                         }
                         // 交叉轴对齐：水平布局→V，垂直布局→H
                         const std::string &crossStr = isH ? pCell->cellAlignV : pCell->cellAlignH;
@@ -1607,6 +1612,11 @@ static void fillTableNode(
                             if      (crossStr == "center")               ca = StackCounterAlign::CENTER;
                             else if (crossStr == "bottom" || crossStr == "right") ca = StackCounterAlign::MAX;
                             n.set_stackCounterAlign(ca);
+
+                            StackAlignItemMode caim = StackAlignItemMode::MIN;
+                            if      (crossStr == "center")               caim = StackAlignItemMode::CENTER;
+                            else if (crossStr == "bottom" || crossStr == "right") caim = StackAlignItemMode::MAX;
+                            n.set_stackCounterAlignItems(caim);
                         }
                     }
                 }
@@ -1950,14 +1960,26 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
             else if (al.alignItems == "max")     ca = StackCounterAlign::MAX;
             else if (al.alignItems == "stretch") ca = StackCounterAlign::STRETCH;
             n.set_stackCounterAlign(ca);
+
+            // stackCounterAlignItems 是独立字段，需同步设置（stretch 无对应值则跳过）
+            StackAlignItemMode aim = StackAlignItemMode::MIN;
+            if      (al.alignItems == "center") aim = StackAlignItemMode::CENTER;
+            else if (al.alignItems == "max")    aim = StackAlignItemMode::MAX;
+            if (al.alignItems != "stretch") n.set_stackCounterAlignItems(aim);
         }
-        // justify_content → stackJustify（主轴方向的分布）
+        // justify_content → stackJustify + stackPrimaryAlignItems（主轴方向的分布）
         {
             StackJustify sj = StackJustify::MIN;
             if      (al.justifyContent == "center")       sj = StackJustify::CENTER;
             else if (al.justifyContent == "max")          sj = StackJustify::MAX;
             else if (al.justifyContent == "space_evenly") sj = StackJustify::SPACE_EVENLY;
             n.set_stackJustify(sj);
+
+            StackAlignItemMode paim = StackAlignItemMode::MIN;
+            if      (al.justifyContent == "center")       paim = StackAlignItemMode::CENTER;
+            else if (al.justifyContent == "max")          paim = StackAlignItemMode::MAX;
+            else if (al.justifyContent == "space_evenly") paim = StackAlignItemMode::SPACE_EVENLY;
+            n.set_stackPrimaryAlignItems(paim);
         }
         n.set_stackWrap(al.wrap ? WrapMode::WRAP : WrapMode::NO_WRAP);
     }

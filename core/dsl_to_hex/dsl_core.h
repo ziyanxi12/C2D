@@ -409,7 +409,7 @@ struct DslLayer {
     std::vector<DslVariantProp> variantProps;
     // text 字段
     std::string textContent;
-    std::string textFontFamily = "PingFang SC";
+    std::string textFontFamily = "HarmonyHeiTi";
     std::string textFontStyle  = "Regular";
     float       textFontSize   = 14.0f;
     std::string textColor      = "#0F172AFF";
@@ -623,8 +623,10 @@ static DslLayer parseLayer(const JVal &j) {
     if (j.has("text_content")) l.textContent = j.get("text_content").asStr();
     if (j.has("text_style")) {
         const JVal &ts = j.get("text_style");
-        if (ts.has("font_family")) l.textFontFamily = ts.get("font_family").asStr();
-        if (ts.has("font_style"))  l.textFontStyle  = ts.get("font_style").asStr();
+        if (ts.has("font_family") && !ts.get("font_family").asStr().empty())
+            l.textFontFamily = ts.get("font_family").asStr();
+        if (ts.has("font_style") && !ts.get("font_style").asStr().empty())
+            l.textFontStyle  = ts.get("font_style").asStr();
         if (ts.has("font_size"))   l.textFontSize   = ts.get("font_size").asFloat();
         if (ts.has("color"))       l.textColor      = ts.get("color").asStr();
         if (ts.has("align_h"))        l.textAlignH        = ts.get("align_h").asStr();
@@ -1880,28 +1882,31 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         SymbolData *sd = pool.allocate<SymbolData>(); new(sd) SymbolData();
         sd->set_symbolID(makeGUID(pool, sgk.s, sgk.l));
 
-        // symbolOverrides：存放用户显式覆盖的 delta 值（如文本覆盖）
-        // 每条 override 对应一个 PixsoNode 槽位，guidPath = [目标节点 GUID]（单 GUID）
+        // symbolOverrides：存放用户显式覆盖的 delta 值（如文本覆盖）以及 variant_props
+        // 文本覆盖槽：guidPath = [目标节点 GUID]（单 GUID）
+        // variant_props 槽：无 guidPath，pluginData 写入实例自身
         {
+            bool hasVarProps = !layer.variantProps.empty();
             uint32_t ovCount = 0;
             for (const auto &ov : layer.overrides)
                 if (ov.field == "text_content" && !ov.value.empty()) ovCount++;
+            uint32_t totalSlots = ovCount + (hasVarProps ? 1 : 0);
 
-            if (ovCount > 0) {
-                auto &sovr = sd->set_symbolOverrides(pool, ovCount);
+            if (totalSlots > 0) {
+                auto &sovr = sd->set_symbolOverrides(pool, totalSlots);
                 uint32_t si = 0;
+
+                // 文本覆盖槽
                 for (const auto &ov : layer.overrides) {
                     if (ov.field != "text_content" || ov.value.empty()) continue;
                     auto ngk = parseGK(ov.nodeId);
 
-                    // guidPath = [{node_guid}]
                     GUIDPath *gp = pool.allocate<GUIDPath>(); new(gp) GUIDPath();
                     auto &guids = gp->set_guids(pool, 1);
                     guids[0].set_sessionID(ngk.s);
                     guids[0].set_localID(ngk.l);
                     sovr[si].set_guidPath(gp);
 
-                    // textData.characters + characterStyleIDs
                     TextData *td = pool.allocate<TextData>(); new(td) TextData();
                     td->set_characters(pool.string(ov.value.c_str()));
                     uint32_t charCount = 0;
@@ -1922,6 +1927,15 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                     sovr[si].set_textData(td);
                     si++;
                 }
+
+                // variant_props 槽：无 guidPath，pluginData 写入实例自身
+                if (hasVarProps) {
+                    std::string vpJson = buildVariantPropsJson(layer.variantProps);
+                    auto &pd = sovr[si].set_pluginData(pool, 1);
+                    pd[0].set_pluginID(pool.string("pix-dsl"));
+                    pd[0].set_key(pool.string("variant_props"));
+                    pd[0].set_value(pool.string(vpJson.c_str()));
+                }
             }
         }
         n.set_symbolData(sd);
@@ -1941,12 +1955,6 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                     fillDerivedSlots(pool, dsd, dsdIdx, *symNode, cmIt->second, path);
                 }
             }
-        }
-
-        // variant_props → pluginData（追加，不覆盖已有条目）
-        if (!layer.variantProps.empty()) {
-            std::string vpJson = buildVariantPropsJson(layer.variantProps);
-            appendPluginData(pool, n, "pix-dsl", "variant_props", vpJson.c_str());
         }
         return;
     }

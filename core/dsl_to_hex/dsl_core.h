@@ -2507,16 +2507,45 @@ static std::vector<uint8_t> buildMsg(
         cv.set_name(pool.string(page.name.c_str()));
         cv.set_parentIndex(makeParent(pool, 0, 0, "!"));
 
+        // 预算本页第一个 FRAME 的 GUID（在 fillLayerNode 分配前计算）
+        uint32_t firstFrameS = 0, firstFrameL = 0;
+        {
+            uint32_t gcOffset = 0;
+            for (auto &layer : page.layers) {
+                if (layer.type == "frame") {
+                    firstFrameS = gc.session;
+                    firstFrameL = gc.local + gcOffset + 1;
+                    break;
+                }
+                gcOffset += countLayerNodes(layer, tmpl);
+            }
+        }
+
         for (size_t li = 0; li < page.layers.size(); li++)
             fillLayerNode(pool, arr, idx, page.layers[li], 0, canvasL, (int)li,
                           symMap, childMaps, gc, tmpl, &tmplBlobRemap);
 
-        // ── variant_props instance：在本页 canvas 下创建隐藏实例节点 ──────────
+        // ── variant_props instance：在第一个 FRAME 下（找不到则退回 canvas）创建隐藏实例节点 ──
+        uint32_t vpParentS = (firstFrameS != 0) ? firstFrameS : 0;
+        uint32_t vpParentL = (firstFrameS != 0) ? firstFrameL : canvasL;
+
         std::vector<const DslVariantProp*> vpInsts;
         for (auto &layer : page.layers)
             collectVarPropInsts(layer, vpInsts);
 
-        int vpPos = (int)page.layers.size();
+        int vpPos = 0;  // 作为 FRAME 的子节点，从 0 开始累加到已有子节点之后
+        // 计算第一个 FRAME 已有的直接子节点数（作为 childPos 起始偏移）
+        if (firstFrameS != 0) {
+            for (auto &layer : page.layers) {
+                if (layer.type == "frame") {
+                    vpPos = (int)layer.children.size();
+                    break;
+                }
+            }
+        } else {
+            vpPos = (int)page.layers.size();
+        }
+
         for (const DslVariantProp *vp : vpInsts) {
             auto [nodeS, nodeL] = gc.next();
             auto sgk = parseGK(vp->symbolId);
@@ -2527,7 +2556,7 @@ static std::vector<uint8_t> buildMsg(
             vpn.set_guid(makeGUID(pool, nodeS, nodeL));
             vpn.set_name(pool.string(vp->key.c_str()));
             vpn.set_visible(false);
-            vpn.set_parentIndex(makeParent(pool, 0, canvasL, makePos(vpPos++)));
+            vpn.set_parentIndex(makeParent(pool, vpParentS, vpParentL, makePos(vpPos++)));
 
             Matrix *vpMat = pool.allocate<Matrix>(); new(vpMat) Matrix();
             vpMat->set_m00(1.f); vpMat->set_m01(0.f); vpMat->set_m02(0.f);

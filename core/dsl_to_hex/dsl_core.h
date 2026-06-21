@@ -381,6 +381,8 @@ struct DslVariantProp {
     // 仅 isInstance=true 时有效，供 collectCompSetKeys 加载 hex 用
     std::string componentSetKey;
     std::string path;
+    std::string symbolId;          // 仅 isInstance=true 时有效，供创建隐藏实例节点用
+    std::string variantKey;        // 仅 isInstance=true 时有效，写入隐藏实例的 pluginData value
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -551,6 +553,8 @@ static DslLayer parseLayer(const JVal &j) {
                         std::string vk = inner.has("variant_key") ? inner.get("variant_key").asStr() : "";
                         prop.componentSetKey = inner.has("component_set_key") ? inner.get("component_set_key").asStr() : "";
                         prop.path = inner.has("path") ? inner.get("path").asStr() : "";
+                        prop.symbolId = inner.has("symbol_id") ? inner.get("symbol_id").asStr() : "";
+                        prop.variantKey = vk;
                         prop.jsonVal = "{\"variant_key\":\"" + vk + "\"}";
                     } else {
                         // 普通值：直接序列化为 JSON 片段
@@ -828,13 +832,29 @@ static uint32_t countLayerNodes(const DslLayer &layer, const TableTemplate *tmpl
     return n;
 }
 
+static uint32_t countVarPropInstances(const DslLayer &layer) {
+    uint32_t n = 0;
+    for (const auto &vp : layer.variantProps)
+        if (vp.isInstance && !vp.symbolId.empty()) n++;
+    for (auto &child : layer.children) n += countVarPropInstances(child);
+    for (auto &hdr : layer.tableData.headers)
+        if (!hdr.type.empty()) n += countVarPropInstances(hdr);
+    for (auto &row : layer.tableData.rows)
+        for (auto &cell : row) n += countVarPropInstances(cell);
+    return n;
+}
+
 static uint32_t countTotal(const DslDoc &doc, uint32_t compNodeCount = 0,
                             const TableTemplate *tmpl = nullptr) {
     uint32_t n = (uint32_t)doc.pages.size();  // 每个 page 一个可见 CANVAS
     n += 1;                                    // 隐藏 CANVAS {0,2}
-    for (auto &page : doc.pages)
+    for (auto &page : doc.pages) {
         for (auto &layer : page.layers)
             n += countLayerNodes(layer, tmpl);
+        // variant_props 里的 instance：每个创建一个隐藏实例节点
+        for (auto &layer : page.layers)
+            n += countVarPropInstances(layer);
+    }
     n += compNodeCount;
     if (tmpl && tmpl->valid())
         n += (uint32_t)tmpl->libraryNodes.size();
@@ -2329,11 +2349,24 @@ static void remapBlobsInNode(PixsoNode &n, const std::map<int32_t, int32_t> &rem
     }
 }
 
+static void collectVarPropInsts(const DslLayer &layer, std::vector<const DslVariantProp*> &out) {
+    for (const auto &vp : layer.variantProps)
+        if (vp.isInstance && !vp.symbolId.empty())
+            out.push_back(&vp);
+    for (auto &child : layer.children)
+        collectVarPropInsts(child, out);
+    for (auto &hdr : layer.tableData.headers)
+        if (!hdr.type.empty()) collectVarPropInsts(hdr, out);
+    for (auto &row : layer.tableData.rows)
+        for (auto &cell : row) collectVarPropInsts(cell, out);
+}
+
 // =============================================================================
 // 构建完整 PixsoMsg
 //
 // 节点顺序：
 //   可见 CANVAS {0,1}/{0,3}/{0,4}... + 该 page 下的图层（DFS 前序）
+//                                    + variant_props instance 隐藏节点
 //   隐藏 CANVAS {0,2}（internalOnly=true，供组件库节点挂载）
 //   组件集全量节点（全局 GUID 去重，跳过 CANVAS，孤根改挂到 {0,2}）
 // =============================================================================
@@ -2477,6 +2510,71 @@ static std::vector<uint8_t> buildMsg(
         for (size_t li = 0; li < page.layers.size(); li++)
             fillLayerNode(pool, arr, idx, page.layers[li], 0, canvasL, (int)li,
                           symMap, childMaps, gc, tmpl, &tmplBlobRemap);
+
+        // ── variant_props instance：在本页 canvas 下创建隐藏实例节点 ──────────
+        std::vector<const DslVariantProp*> vpInsts;
+        for (auto &layer : page.layers)
+            collectVarPropInsts(layer, vpInsts);
+
+        int vpPos = (int)page.layers.size();
+        for (const DslVariantProp *vp : vpInsts) {
+            auto [nodeS, nodeL] = gc.next();
+            auto sgk = parseGK(vp->symbolId);
+            PixsoNode &vpn = arr[idx++];
+
+            vpn.set_type(NodeType::INSTANCE);
+            vpn.set_phase(NodePhase::CREATED);
+            vpn.set_guid(makeGUID(pool, nodeS, nodeL));
+            vpn.set_name(pool.string(vp->key.c_str()));
+            vpn.set_visible(false);
+            vpn.set_parentIndex(makeParent(pool, 0, canvasL, makePos(vpPos++)));
+
+            Matrix *vpMat = pool.allocate<Matrix>(); new(vpMat) Matrix();
+            vpMat->set_m00(1.f); vpMat->set_m01(0.f); vpMat->set_m02(0.f);
+            vpMat->set_m10(0.f); vpMat->set_m11(1.f); vpMat->set_m12(0.f);
+            vpn.set_transform(vpMat);
+
+            float vpW = 0.f, vpH = 0.f;
+            auto vpSmSz = symMap.find(vp->symbolId);
+            if (vpSmSz != symMap.end()) {
+                const PixsoNode *sym = vpSmSz->second.second;
+                if (sym->size()) {
+                    if (sym->size()->x()) vpW = *sym->size()->x();
+                    if (sym->size()->y()) vpH = *sym->size()->y();
+                }
+            }
+            Vector *vpSz = pool.allocate<Vector>(); new(vpSz) Vector();
+            vpSz->set_x(vpW); vpSz->set_y(vpH);
+            vpn.set_size(vpSz);
+
+            SymbolData *vpSd = pool.allocate<SymbolData>(); new(vpSd) SymbolData();
+            vpSd->set_symbolID(makeGUID(pool, sgk.s, sgk.l));
+            vpn.set_symbolData(vpSd);
+
+            if (!vp->variantKey.empty()) {
+                auto &pd = vpn.set_pluginData(pool, 1);
+                pd[0].set_pluginID(pool.string("pix-dsl"));
+                pd[0].set_key(pool.string("variant_props"));
+                pd[0].set_value(pool.string(vp->variantKey.c_str()));
+            }
+
+            // derivedSymbolData
+            auto vpSmIt = symMap.find(vp->symbolId);
+            if (vpSmIt != symMap.end()) {
+                CompSetData *csData = vpSmIt->second.first;
+                const PixsoNode *symNode = vpSmIt->second.second;
+                auto cmIt = childMaps.find(csData);
+                if (cmIt != childMaps.end()) {
+                    uint32_t cnt = computeDerivedCount(*symNode, cmIt->second);
+                    if (cnt > 0) {
+                        auto &dsd = vpn.set_derivedSymbolData(pool, cnt);
+                        uint32_t dsdIdx = 0;
+                        std::vector<std::pair<uint32_t,uint32_t>> dsdPath;
+                        fillDerivedSlots(pool, dsd, dsdIdx, *symNode, cmIt->second, dsdPath);
+                    }
+                }
+            }
+        }
     }
 
     // ── 隐藏 CANVAS {0,2}（组件库节点的挂载点）──────────────────────────────

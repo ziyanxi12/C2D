@@ -1861,15 +1861,15 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
         mat->set_m10(0.f); mat->set_m11(1.f); mat->set_m12(layer.box.y);
         n.set_transform(mat);
 
-        // 尺寸优先用 SYMBOL 节点自身的 size，DSL box 仅兜底
+        // 尺寸优先用 DSL box（实际实例尺寸），SYMBOL 组件默认 size 仅兜底（box 为 0 时）
         float sizeW = layer.box.w, sizeH = layer.box.h;
-        {
+        if (sizeW == 0 || sizeH == 0) {
             auto smSz = symMap.find(layer.symbolId);
             if (smSz != symMap.end()) {
                 const PixsoNode *sym = smSz->second.second;
                 if (sym->size()) {
-                    if (sym->size()->x()) sizeW = *sym->size()->x();
-                    if (sym->size()->y()) sizeH = *sym->size()->y();
+                    if (sizeW == 0 && sym->size()->x()) sizeW = *sym->size()->x();
+                    if (sizeH == 0 && sym->size()->y()) sizeH = *sym->size()->y();
                 }
             }
         }

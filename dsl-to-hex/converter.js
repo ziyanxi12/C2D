@@ -182,9 +182,9 @@ async function readAllHex(refs) {
 // ---------------------------------------------------------------------------
 function buildZip(tmpDir, hexContent, placeholders) {
   fs.writeFileSync(path.join(tmpDir, 'output.txt'), hexContent, 'utf8');
-  fs.writeFileSync(path.join(tmpDir, 'version'), VERSION, 'utf8');
+  fs.writeFileSync(path.join(tmpDir, VERSION), '', 'utf8');
 
-  const files = ['output.txt', 'version'];
+  const files = ['output.txt', VERSION];
   
   for (const { id, ext } of placeholders) {
     const guid = idToGuid(id);

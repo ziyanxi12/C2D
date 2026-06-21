@@ -1928,9 +1928,14 @@ static void fillLayerNode(kiwi::MemoryPool &pool,
                     si++;
                 }
 
-                // variant_props 槽：无 guidPath，pluginData 写入实例自身
+                // variant_props 槽：guidPath = [symbolID]，pluginData 写入实例自身
                 if (hasVarProps) {
                     std::string vpJson = buildVariantPropsJson(layer.variantProps);
+                    GUIDPath *gp = pool.allocate<GUIDPath>(); new(gp) GUIDPath();
+                    auto &guids = gp->set_guids(pool, 1);
+                    guids[0].set_sessionID(sgk.s);
+                    guids[0].set_localID(sgk.l);
+                    sovr[si].set_guidPath(gp);
                     auto &pd = sovr[si].set_pluginData(pool, 1);
                     pd[0].set_pluginID(pool.string("pix-dsl"));
                     pd[0].set_key(pool.string("variant_props"));

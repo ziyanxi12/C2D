@@ -2578,14 +2578,21 @@ static std::vector<uint8_t> buildMsg(
 
             SymbolData *vpSd = pool.allocate<SymbolData>(); new(vpSd) SymbolData();
             vpSd->set_symbolID(makeGUID(pool, sgk.s, sgk.l));
-            vpn.set_symbolData(vpSd);
 
             if (!vp->variantKey.empty()) {
-                auto &pd = vpn.set_pluginData(pool, 1);
+                auto &sovr = vpSd->set_symbolOverrides(pool, 1);
+                GUIDPath *gp = pool.allocate<GUIDPath>(); new(gp) GUIDPath();
+                auto &guids = gp->set_guids(pool, 1);
+                guids[0].set_sessionID(sgk.s);
+                guids[0].set_localID(sgk.l);
+                sovr[0].set_guidPath(gp);
+                auto &pd = sovr[0].set_pluginData(pool, 1);
                 pd[0].set_pluginID(pool.string("pix-dsl"));
-                pd[0].set_key(pool.string("variant_props"));
+                pd[0].set_key(pool.string("instance_swap"));
                 pd[0].set_value(pool.string(vp->variantKey.c_str()));
             }
+
+            vpn.set_symbolData(vpSd);
 
             // derivedSymbolData
             auto vpSmIt = symMap.find(vp->symbolId);

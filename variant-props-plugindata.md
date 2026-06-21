@@ -69,14 +69,27 @@
 
 `symbolData.symbolID` = `{200, 1}`
 
-`pluginData`（直接挂在节点上）：
+`symbolData.symbolOverrides[0]`：
 ```json
-[{
-  "pluginID": "pix-dsl",
-  "key": "variant_props",
-  "value": "def222"
-}]
+{
+  "guidPath": { "guids": [{ "sessionID": 200, "localID": 1 }] },
+  "pluginData": [{
+    "pluginID": "pix-dsl",
+    "key": "instance_swap",
+    "value": "def222"
+  }]
+}
 ```
 
 > value 直接是该 instance 的 `variant_key` 原始字符串。
 > 此节点仅为保留组件 hex 数据不被清除，不参与布局。
+
+---
+
+## pluginData key 汇总
+
+| key | 写在哪 | 含义 |
+|-----|--------|------|
+| `placeholder_meta` | 节点 `pluginData` | SVG/图片占位元数据 |
+| `variant_props` | 实例 `symbolOverrides[0].pluginData` | 该实例的全量属性 JSON |
+| `instance_swap` | 隐藏实例 `symbolOverrides[0].pluginData` | variant_props 里 instance 值的 variant_key |

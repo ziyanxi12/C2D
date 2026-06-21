@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const createLogger = require('../logger');
 
-const VERSION = '1.0.0';
+const VERSION = require('./package.json').version;
 
 const envFile = path.resolve(__dirname, '.env');
 if (fs.existsSync(envFile)) {
@@ -182,9 +182,9 @@ async function readAllHex(refs) {
 // ---------------------------------------------------------------------------
 function buildZip(tmpDir, hexContent, placeholders) {
   fs.writeFileSync(path.join(tmpDir, 'output.txt'), hexContent, 'utf8');
-  fs.writeFileSync(path.join(tmpDir, 'version.txt'), VERSION, 'utf8');
+  fs.writeFileSync(path.join(tmpDir, 'version'), VERSION, 'utf8');
 
-  const files = ['output.txt', 'version.txt'];
+  const files = ['output.txt', 'version'];
   
   for (const { id, ext } of placeholders) {
     const guid = idToGuid(id);

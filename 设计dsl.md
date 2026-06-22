@@ -143,12 +143,12 @@
 "variant_props": { "status": "primary", "disabled": false, "count": 3 }
 ```
 
-**DSL 格式（instance 节点）**：value 为一个完整的 InstanceLayer 结构（含 `type: "instance"` 和 `instance` 子对象）。key 为**组件变体设置的实例**属性名（即该属性的值本身是一个子组件实例，如图标槽位、头像槽位等）。`dsl-to-hex` 转换时会加载该 instance 对应的组件集 hex 数据（节点写入最终 hex），但**不会**为其创建 INSTANCE PixsoNode。
+**DSL 格式（instance 节点）**：value 为一个完整的 InstanceLayer 结构（含 `type: "instance"` 和 `instance` 子对象）。key 为**组件变体设置的实例**属性名（即该属性的值本身是一个子组件实例，如图标槽位、头像槽位等）。`dsl-to-hex` 转换时会加载该 instance 对应的组件集 hex 数据（节点写入最终 hex），同时创建一个**隐藏** INSTANCE PixsoNode。
 
 ```json
 "variant_props": {
-  "label": "确认",
-  "icon": {
+  "text": "确认",
+  "_iconName_12": {
     "type": "instance",
     "instance": {
       "symbol_id": "200:1",
@@ -169,7 +169,7 @@
 
 ```json
 // 上例对应的 pluginData value：
-{"label":"确认","icon":{"variant_key":"abc123def456"}}
+{"text":"确认","_iconName_12":{"variant_key":"abc123def456"}}
 ```
 
 ### InstanceOverride
@@ -701,7 +701,7 @@ box.width 也为 0         → 使用模版默认列宽（约 409px）
                 "variant_key": "549fdf93a10fec402c93432a2e228e407ccc2954",
                 "component_set_key": "ecb8481025909ec9371c3b25104bb8b7c1079224",
                 "component_set_resolved": true,
-                "path": "h-design-chart/component/ecb8481025909ec9371c3b25104bb8b7c1079224.txt",
+                "path": "ICT_UI/component/ecb8481025909ec9371c3b25104bb8b7c1079224.txt",
                 "variant_props": { "尺寸": "40" },
                 "overrides": []
               }
@@ -718,31 +718,86 @@ box.width 也为 0         → 使用模版默认列宽（约 409px）
 
 ## PlaceholderMeta
 
-占位符标记数据，用于标记需要替换为 SVG 或图片资源的图层。仅 SVG 和图片类型的图层会使用占位符。placeholder 数据会写入 Pixso 文件的 pluginData 字段，便于后续处理。
+占位符标记数据，用于标记需要替换为 SVG 或图片资源的图层。placeholder 字段写在图层的公共字段层级（与 `type`、`box` 同级），所有图层类型均可携带。
 
 | 字段 | 类型 | 必选 | 说明 |
 |---|---|---|---|
-| `is_placeholder` | boolean | 是 | 是否为占位符 |
-| `replacement_type` | `"svg"` \| `"image"` | 是 | 替换类型：<br>• `"svg"` - 矢量 SVG 资源<br>• `"image"` - 图片资源 |
-| `note` | string | 否 | DSL 中存放原始 SVG 字符串或图片 base64 内容；`dsl-to-hex` 转换时会将其提取为独立资源文件并写入 zip，hex 中对应位置替换为文件名（格式 `{id}.svg` / `{id}.png`，其中 `id` 为图层的 `id` 字段值、冒号替换为下划线）。因此含 placeholder 的图层**必须提供 `id` 字段**，且同一 DSL 内唯一 |
+| `is_placeholder` | boolean | 是 | 是否为占位符，固定传 `true` |
+| `replacement_type` | `"svg"` \| `"image"` | 是 | 替换类型：`"svg"` 为矢量资源，`"image"` 为图片资源 |
+| `note` | string | 否 | 原始内容：SVG 字符串或图片 base64。转换时提取为独立资源文件写入 zip，hex 中该字段替换为文件名 |
 
-**pluginData 写入规则**：
-- 当图层包含 `placeholder` 字段时，解析器会将其写入 PixsoNode 的 pluginData 数组
-- pluginID：`"pix-dsl"`
-- key：`"placeholder_meta"`
-- value：JSON 字符串格式，包含上述三个字段（`note` 此时已替换为资源文件名）
+**资源文件命名规则**：
+- 文件名 = 图层 `id` 字段的值，冒号替换为下划线，加扩展名
+- `replacement_type: "svg"` → `{id}.svg`，如 id `"1:14"` → `1_14.svg`
+- `replacement_type: "image"` → note 内容以 `data:image/svg+xml` 或 `<svg` 开头时为 `.svg`，否则为 `.png`
+- 因此含 placeholder 的图层**必须提供 `id` 字段**，且同一 DSL 内唯一
 
-**示例**：
+**pluginData 写入**：转换完成后，该图层对应的 PixsoNode 会写入一条 pluginData：
+
+| 字段 | 值 |
+|---|---|
+| pluginID | `"pix-dsl"` |
+| key | `"placeholder_meta"` |
+| value | JSON 字符串（见下方格式） |
+
+value 的 JSON 结构与 DSL 中的 `placeholder` 对象相同，但 `note` 字段已替换为资源文件名：
+
+```json
+{"is_placeholder":true,"replacement_type":"svg","note":"1_14.svg"}
+```
+
+### 示例：SVG 类型
+
+DSL 输入：
 ```json
 {
   "id": "1:14",
   "name": "眼睛图标",
   "type": "rectangle",
+  "box": { "x": 404, "y": 372, "width": 20, "height": 20 },
   "placeholder": {
     "is_placeholder": true,
     "replacement_type": "svg",
     "note": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\">...</svg>"
-  },
-  "box": { "x": 404, "y": 372, "width": 20, "height": 20 }
+  }
 }
 ```
+
+转换后 hex 中该节点的 pluginData：
+```json
+{
+  "pluginID": "pix-dsl",
+  "key": "placeholder_meta",
+  "value": "{\"is_placeholder\":true,\"replacement_type\":\"svg\",\"note\":\"1_14.svg\"}"
+}
+```
+
+zip 包中同时生成资源文件 `1_14.svg`，内容为 `note` 原始 SVG 字符串。
+
+### 示例：图片类型
+
+DSL 输入：
+```json
+{
+  "id": "2:5",
+  "name": "用户头像",
+  "type": "rectangle",
+  "box": { "x": 0, "y": 0, "width": 40, "height": 40 },
+  "placeholder": {
+    "is_placeholder": true,
+    "replacement_type": "image",
+    "note": "data:image/png;base64,iVBORw0KGgo..."
+  }
+}
+```
+
+转换后 hex 中该节点的 pluginData：
+```json
+{
+  "pluginID": "pix-dsl",
+  "key": "placeholder_meta",
+  "value": "{\"is_placeholder\":true,\"replacement_type\":\"image\",\"note\":\"2_5.png\"}"
+}
+```
+
+zip 包中同时生成资源文件 `2_5.png`，内容为解码后的图片数据。

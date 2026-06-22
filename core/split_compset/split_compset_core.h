@@ -313,6 +313,13 @@ static void collectSubtree(const GK &root, const LibIndex &li,
     }
 }
 
+// ─────────── 组件属性条目 ───────────
+
+struct CompPropEntry {
+    std::string name;
+    std::string type; // "TEXT" | "BOOL" | "INSTANCE_SWAP" | "COLOR"
+};
+
 // ─────────── 变体信息（组件集下的 SYMBOL 子节点）───────────
 
 struct VariantInfo {
@@ -320,6 +327,7 @@ struct VariantInfo {
     std::string guid;         // "sessionID:localID" 格式
     std::string componentKey; // 变体 key
     std::string parentKey;    // 所属组件集的 componentKey
+    std::vector<CompPropEntry> componentProps; // 该变体实际用到的组件属性
 };
 
 // ─────────── 组件集信息 ───────────
@@ -564,6 +572,70 @@ static std::vector<uint8_t> encodeNodes(const std::vector<GK> &guids,
     return std::vector<uint8_t>(bb.data(), bb.data() + bb.size());
 }
 
+// ─────────── 扫变体子树收集 componentProps ───────────
+//
+// propByVarId: 变体自己的 componentPropDef.id → {name, type}
+//   - 对于组件集变体：经 parentPropDefId 从父 FRAME 的 propDef 翻译而来
+//   - 对于独立 SYMBOL：直接来自自身 componentPropDef（name 有值）
+//
+// 只收集 VISIBLE / TEXT_DATA / OVERRIDDEN_SYMBOL_ID 三种字段类型，
+// 忽略 INHERIT_FILL_STYLE_ID（样式引用，非组件属性）。
+
+static void scanVariantProps(
+    const GK &variantGuid,
+    const LibIndex &li,
+    const std::map<GK, std::pair<std::string, std::string>> &propByVarId,
+    std::vector<CompPropEntry> &out)
+{
+    if (propByVarId.empty()) return;
+
+    std::set<std::string> seen;
+    std::vector<GK> stack = { variantGuid };
+
+    while (!stack.empty()) {
+        GK cur = stack.back(); stack.pop_back();
+        auto nit = li.byGuid.find(cur);
+        if (nit == li.byGuid.end() || !nit->second.raw) continue;
+        const PixsoNode *n = nit->second.raw;
+
+        const auto *refs = n->componentPropRef();
+        if (refs) {
+            for (uint32_t i = 0; i < refs->size(); i++) {
+                const ComponentPropRef &ref = (*refs)[i];
+                if (!ref.componentPropNodeField() || !ref.defID()) continue;
+                auto field = *ref.componentPropNodeField();
+                if (field != ComponentPropNodeField::VISIBLE &&
+                    field != ComponentPropNodeField::TEXT_DATA &&
+                    field != ComponentPropNodeField::OVERRIDDEN_SYMBOL_ID) continue;
+                auto pit = propByVarId.find(gk(ref.defID()));
+                if (pit == propByVarId.end()) continue;
+                const std::string &pname = pit->second.first;
+                if (!seen.count(pname)) {
+                    seen.insert(pname);
+                    out.push_back({pname, pit->second.second});
+                }
+            }
+        }
+
+        auto cit = li.children.find(cur);
+        if (cit != li.children.end())
+            for (const GK &child : cit->second) stack.push_back(child);
+    }
+}
+
+// ─────────── 从 componentPropDef 数组构建 type 字符串 ───────────
+
+static std::string propTypeName(const ComponentPropDef &d) {
+    if (!d.type()) return "UNKNOWN";
+    switch (*d.type()) {
+        case ComponentPropType::BOOL:          return "BOOL";
+        case ComponentPropType::TEXT:          return "TEXT";
+        case ComponentPropType::COLOR:         return "COLOR";
+        case ComponentPropType::INSTANCE_SWAP: return "INSTANCE_SWAP";
+        default: return "UNKNOWN";
+    }
+}
+
 // ─────────── 主拆解函数 ───────────
 
 static std::vector<CompSet> splitLibrary(const LibIndex &li) {
@@ -594,6 +666,22 @@ static std::vector<CompSet> splitLibrary(const LibIndex &li) {
         cs.totalNodes = (int)ordered.size();
 
         if (isCompSet) {
+            // 建父 FRAME 的 propDef id → {name, type} 映射（name 在父节点上）
+            std::map<GK, std::pair<std::string, std::string>> parentDefMap;
+            if (child.raw) {
+                const auto *defs = child.raw->componentPropDef();
+                if (defs) {
+                    for (uint32_t i = 0; i < defs->size(); i++) {
+                        const ComponentPropDef &d = (*defs)[i];
+                        if (d.isDeleted() && *d.isDeleted()) continue;
+                        if (!d.id()) continue;
+                        std::string pname = safeStr(d.name());
+                        if (pname.empty()) continue;
+                        parentDefMap[gk(d.id())] = { pname, propTypeName(d) };
+                    }
+                }
+            }
+
             auto cit = li.children.find(child.guid);
             if (cit != li.children.end()) {
                 for (const GK &vGuid : cit->second) {
@@ -604,6 +692,23 @@ static std::vector<CompSet> splitLibrary(const LibIndex &li) {
                     vi.guid         = std::to_string(vr.guid.s) + ":" + std::to_string(vr.guid.l);
                     vi.componentKey = vr.componentKey;
                     vi.parentKey    = child.componentKey;
+
+                    // 建变体自己的 propDef id → {name, type}（经 parentPropDefId 转换）
+                    std::map<GK, std::pair<std::string, std::string>> varPropById;
+                    if (vr.raw) {
+                        const auto *vdefs = vr.raw->componentPropDef();
+                        if (vdefs) {
+                            for (uint32_t i = 0; i < vdefs->size(); i++) {
+                                const ComponentPropDef &d = (*vdefs)[i];
+                                if (d.isDeleted() && *d.isDeleted()) continue;
+                                if (!d.id() || !d.parentPropDefId()) continue;
+                                auto pit = parentDefMap.find(gk(d.parentPropDefId()));
+                                if (pit != parentDefMap.end())
+                                    varPropById[gk(d.id())] = pit->second;
+                            }
+                        }
+                    }
+                    scanVariantProps(vGuid, li, varPropById, vi.componentProps);
                     cs.variants.push_back(std::move(vi));
                 }
             }
@@ -613,6 +718,23 @@ static std::vector<CompSet> splitLibrary(const LibIndex &li) {
             vi.guid         = std::to_string(child.guid.s) + ":" + std::to_string(child.guid.l);
             vi.componentKey = child.componentKey;
             vi.parentKey    = child.componentKey;
+
+            // 独立 SYMBOL：name 直接在自身 componentPropDef 上
+            std::map<GK, std::pair<std::string, std::string>> selfPropById;
+            if (child.raw) {
+                const auto *defs = child.raw->componentPropDef();
+                if (defs) {
+                    for (uint32_t i = 0; i < defs->size(); i++) {
+                        const ComponentPropDef &d = (*defs)[i];
+                        if (d.isDeleted() && *d.isDeleted()) continue;
+                        if (!d.id()) continue;
+                        std::string pname = safeStr(d.name());
+                        if (pname.empty()) continue;
+                        selfPropById[gk(d.id())] = { pname, propTypeName(d) };
+                    }
+                }
+            }
+            scanVariantProps(child.guid, li, selfPropById, vi.componentProps);
             cs.variants.push_back(std::move(vi));
         }
 
@@ -723,7 +845,8 @@ static std::string compSetFileName(const CompSet &cs) {
 
 static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
                               const std::string &outdir,
-                              bool writeIndex) {
+                              bool writeIndex,
+                              const std::string &domain = "") {
     DumpStats stats;
     stats.compDir = outdir + "/component";
     mkdir(outdir.c_str(),        0755);
@@ -753,6 +876,9 @@ static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
 
         fprintf(jf, "{\n");
 
+        if (!domain.empty())
+            fprintf(jf, "  \"domain\": \"%s\",\n", domain.c_str());
+
         // 组件集列表（isStateGroup==true）
         fprintf(jf, "  \"componentSets\": [\n");
         bool firstCs = true;
@@ -775,7 +901,19 @@ static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
                 fprintf(jf, "          \"name\": \"%s\",\n", v.name.c_str());
                 fprintf(jf, "          \"guid\": \"%s\",\n", v.guid.c_str());
                 fprintf(jf, "          \"variantKey\": \"%s\",\n", v.componentKey.c_str());
-                fprintf(jf, "          \"parentKey\": \"%s\"\n", v.parentKey.c_str());
+                if (!v.componentProps.empty()) {
+                    fprintf(jf, "          \"parentKey\": \"%s\",\n", v.parentKey.c_str());
+                    fprintf(jf, "          \"componentProps\": [\n");
+                    for (size_t pi = 0; pi < v.componentProps.size(); pi++) {
+                        if (pi > 0) fprintf(jf, ",\n");
+                        fprintf(jf, "            { \"name\": \"%s\", \"type\": \"%s\" }",
+                                v.componentProps[pi].name.c_str(),
+                                v.componentProps[pi].type.c_str());
+                    }
+                    fprintf(jf, "\n          ]\n");
+                } else {
+                    fprintf(jf, "          \"parentKey\": \"%s\"\n", v.parentKey.c_str());
+                }
                 fprintf(jf, "        }");
             }
             if (!cs.variants.empty()) fprintf(jf, "\n");
@@ -798,7 +936,21 @@ static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
             fprintf(jf, "      \"guid\": \"%u:%u\",\n", cs.rootGuid.s, cs.rootGuid.l);
             fprintf(jf, "      \"componentKey\": \"%s\",\n", cs.componentKey.c_str());
             fprintf(jf, "      \"canvasName\": \"%s\",\n", cs.canvasName.c_str());
-            fprintf(jf, "      \"hexFile\": \"%s\"\n", hexFile.c_str());
+            {
+                const auto &props = cs.variants.empty() ? std::vector<CompPropEntry>{} : cs.variants[0].componentProps;
+                if (!props.empty()) {
+                    fprintf(jf, "      \"hexFile\": \"%s\",\n", hexFile.c_str());
+                    fprintf(jf, "      \"componentProps\": [\n");
+                    for (size_t pi = 0; pi < props.size(); pi++) {
+                        if (pi > 0) fprintf(jf, ",\n");
+                        fprintf(jf, "        { \"name\": \"%s\", \"type\": \"%s\" }",
+                                props[pi].name.c_str(), props[pi].type.c_str());
+                    }
+                    fprintf(jf, "\n      ]\n");
+                } else {
+                    fprintf(jf, "      \"hexFile\": \"%s\"\n", hexFile.c_str());
+                }
+            }
             fprintf(jf, "    }");
         }
         if (!firstSc) fprintf(jf, "\n");

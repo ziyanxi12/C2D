@@ -4,6 +4,38 @@
 
 ---
 
+## 格式说明
+
+本文档中有两种描述方式，需要区分：
+
+**普通格式**：用简单值（字符串 / 布尔 / 数字）直接表示内容。常见于表格列头、variant_props 属性值等场景。
+
+```json
+// 普通格式示例（表格列头、variant_props 值）
+"headers": ["姓名", "状态", "操作"]
+"variant_props": { "size": "large", "disabled": false }
+```
+
+**DSL 格式**：用完整 Layer 对象（含 `type`、`name`、`box` 及类型相关字段）描述节点树。这是本文档的主体格式，适用于所有图层描述、富类型表头、表格单元格等。
+
+```json
+// DSL 格式示例（完整 Layer 对象）
+{
+  "type": "text",
+  "name": "标题",
+  "visible": true,
+  "opacity": 1,
+  "blend_mode": "normal",
+  "box": { "x": 0, "y": 0, "width": 200, "height": 24 },
+  "text_content": "Hello",
+  "text_style": { ... }
+}
+```
+
+> 两种格式可混用的地方只有 `table.headers`（每个列头元素可以是字符串或 Layer）和 `instance.variant_props`（每个 value 可以是普通值或 instance 节点）。其余所有图层字段均为 DSL 格式。
+
+---
+
 ## 顶层结构
 
 ```json
@@ -49,33 +81,33 @@
 
 ### 公共字段
 
-| 字段 | 类型 | 必选 | 说明 |
-|---|---|---|---|
-| `id` | string | 否 | 节点标识符，任意字符串。节点 GUID 由转换器内部自动生成，`id` 不再参与 GUID 分配。**仅当图层含 `placeholder` 字段时需要提供**，用于资源文件命名（格式不限，但需在同一 DSL 内唯一）|
-| `name` | string | 是 | 节点名称 |
-| `type` | string | 是 | 节点类型，见 [LayerType](#layertype) |
-| `visible` | boolean | 是 | 是否可见 |
-| `opacity` | number | 是 | 透明度，范围 `0`~`1` |
-| `blend_mode` | string | 是 | 混合模式，见 [BlendMode](#blendmode) |
-| `box` | BoundingBox | 是 | 节点包围框，相对父节点坐标 |
-| `placeholder` | PlaceholderMeta | 否 | 占位符元信息（标记临时替代图层）|
+| 字段 | 类型 | 必选 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `id` | string | 否 | — | 节点标识符，任意字符串。节点 GUID 由转换器内部自动生成，`id` 不再参与 GUID 分配。**仅当图层含 `placeholder` 字段时需要提供**，用于资源文件命名（格式不限，但需在同一 DSL 内唯一）|
+| `name` | string | 是 | — | 节点名称 |
+| `type` | string | 是 | — | 节点类型，见 [LayerType](#layertype) |
+| `visible` | boolean | 否 | `true` | 是否可见 |
+| `opacity` | number | 否 | `1` | 透明度，范围 `0`~`1` |
+| `blend_mode` | string | 否 | `"normal"` | 混合模式，见 [BlendMode](#blendmode) |
+| `box` | BoundingBox | 是 | — | 节点包围框，相对父节点坐标 |
+| `placeholder` | PlaceholderMeta | 否 | — | 占位符元信息（标记临时替代图层）|
 
 ### NormalLayer（普通图层）
 
 `type` 为 `frame / group / rectangle / ellipse / vector / star / line / boolean / text` 之一。
 
-| 字段 | 类型 | 必选 | 说明 |
-|---|---|---|---|
-| `fills` | Fill[] | 否 | 填充列表 |
-| `strokes` | Stroke[] | 否 | 描边列表 |
-| `stroke_width` | number | 否 | 描边宽度（px），默认为 1 |
-| `effects` | Effect[] | 否 | 效果列表（阴影、模糊等），详见 [Effect](#effect) 章节（**未完整实现**）|
-| `corner_radius` | number | 否 | 圆角半径（统一值）|
-| `corner_radii` | number[4] | 否 | 四角独立圆角 `[TL, TR, BR, BL]`（顺时针：左上、右上、右下、左下），与 `corner_radius` 互斥 |
-| `auto_layout` | AutoLayout | 否 | 自动布局（仅 `frame` 类型，且开启了 Auto Layout）|
-| `text_content` | string | 否 | 文本内容（仅 `text` 类型）|
-| `text_style` | TextStyle | 否 | 文本样式（仅 `text` 类型）|
-| `children` | Layer[] | 否 | 子图层列表（仅 `frame / group / boolean` 类型）|
+| 字段 | 类型 | 必选 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `fills` | Fill[] | 否 | `[]` | 填充列表 |
+| `strokes` | Stroke[] | 否 | `[]` | 描边列表 |
+| `stroke_width` | number | 否 | `1` | 描边宽度（px），有 `strokes` 时生效 |
+| `effects` | Effect[] | 否 | `[]` | 效果列表（阴影、模糊等），详见 [Effect](#effect) 章节（**未完整实现**）|
+| `corner_radius` | number | 否 | `0` | 圆角半径（统一值）|
+| `corner_radii` | number[4] | 否 | — | 四角独立圆角 `[TL, TR, BR, BL]`（顺时针：左上、右上、右下、左下），与 `corner_radius` 互斥，优先级更高 |
+| `auto_layout` | AutoLayout | 否 | — | 自动布局（仅 `frame` 类型，且开启了 Auto Layout）|
+| `text_content` | string | 否 | `""` | 文本内容（仅 `text` 类型）|
+| `text_style` | TextStyle | 否 | — | 文本样式（仅 `text` 类型），缺省时各子字段有默认值，见 [TextStyle](#textstyle)|
+| `children` | Layer[] | 否 | `[]` | 子图层列表（仅 `frame / group / boolean` 类型）|
 
 ### InstanceLayer（实例图层）
 
@@ -96,22 +128,22 @@
 | `symbol_id` | string | 是 | 变体 SYMBOL 的 GUID，格式 `"sessionID:localID"`。转换时与组件集 hex 中查到的 GUID 做校验，不一致则以库为准并更新 |
 | `variant_key` | string | 是 | 变体的 `componentKey`（该 SYMBOL 的全局唯一 hash）|
 | `component_set_key` | string | 是 | 所属组件集的 `componentKey`；若该组件无父组件集，则与 `variant_key` 相同 |
-| `component_set_resolved` | boolean | 是 | 本地库是否已成功解析该组件集，默认为 `true`。`false` 表示组件集 key 存在但对应库文件当前不可用，`dsl-to-hex` 转换时将降级处理 |
+| `component_set_resolved` | boolean | 否 | 本地库是否已成功解析该组件集，默认为 `true`。`false` 表示组件集 key 存在但对应库文件当前不可用，`dsl-to-hex` 转换时将降级处理 |
 | `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"ICT_UI/component/9a9da828027b6bdc773731bb333817c0799c208d.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
-| `variant_props` | object | 否 | 变体属性键值对；key 格式由组件库定义，可为中文或英文。value 可为普通类型（string / boolean / number）或 instance 节点对象（见下方说明）|
+| `variant_props` | object | 否 | 变体属性键值对；key 格式由组件库定义，可为中文或英文。value 可为普通值（string / boolean / number）或 instance 节点对象（见下方说明）|
 | `overrides` | InstanceOverride[] | 否 | 实例级属性覆写列表 |
 
 ### variant_props value 类型
 
 `variant_props` 的每个 value 支持两种形式：
 
-**普通值**：string / boolean / number，直接描述变体属性。
+**普通格式**：string / boolean / number，直接描述变体属性。
 
 ```json
 "variant_props": { "status": "primary", "disabled": false, "count": 3 }
 ```
 
-**instance 节点**：value 为一个完整的 InstanceLayer 结构（含 `type: "instance"` 和 `instance` 子对象），表示该属性的值本身是一个组件实例。`dsl-to-hex` 转换时会加载该 instance 对应的组件集 hex 数据（节点写入最终 hex），但**不会**为其创建 INSTANCE PixsoNode。
+**DSL 格式（instance 节点）**：value 为一个完整的 InstanceLayer 结构（含 `type: "instance"` 和 `instance` 子对象）。key 为**组件变体设置的实例**属性名（即该属性的值本身是一个子组件实例，如图标槽位、头像槽位等）。`dsl-to-hex` 转换时会加载该 instance 对应的组件集 hex 数据（节点写入最终 hex），但**不会**为其创建 INSTANCE PixsoNode。
 
 ```json
 "variant_props": {
@@ -163,15 +195,15 @@
 
 ## AutoLayout
 
-| 字段 | 类型 | 必选 | 说明 |
-|---|---|---|---|
-| `direction` | string | 是 | `"horizontal"` / `"vertical"` |
-| `gap` | number | 是 | 主轴间距 |
-| `counter_gap` | number | 否 | 交叉轴间距（仅 `wrap: true` 时有效）|
-| `padding` | number[4] | 是 | 内边距 `[top, right, bottom, left]` |
-| `align_items` | string | 是 | 交叉轴对齐：`"min"` / `"center"` / `"max"` / `"stretch"` |
-| `justify_content` | string | 是 | 主轴对齐：`"min"` / `"center"` / `"max"` / `"space_evenly"` |
-| `wrap` | boolean | 是 | 是否换行 |
+| 字段 | 类型 | 必选 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `direction` | string | 否 | `"vertical"` | `"horizontal"` / `"vertical"` |
+| `gap` | number | 否 | `0` | 主轴间距 |
+| `counter_gap` | number | 否 | `0` | 交叉轴间距（仅 `wrap: true` 时有效）|
+| `padding` | number[4] | 否 | `[0,0,0,0]` | 内边距 `[top, right, bottom, left]` |
+| `align_items` | string | 否 | `"min"` | 交叉轴对齐：`"min"` / `"center"` / `"max"` / `"stretch"` |
+| `justify_content` | string | 否 | `"min"` | 主轴对齐：`"min"` / `"center"` / `"max"` / `"space_evenly"` |
+| `wrap` | boolean | 否 | `false` | 是否换行 |
 
 ---
 
@@ -179,14 +211,14 @@
 
 Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型，`image_hash` 字段仅对 Fill 有效。
 
-| 字段 | 类型 | 必选 | 说明 |
-|---|---|---|---|
-| `type` | string | 是 | Fill：`"solid"` / `"gradient_linear"` / `"gradient_radial"` / `"image"`；Stroke：`"solid"` / `"gradient_linear"` / `"gradient_radial"` |
-| `visible` | boolean | 是 | 是否可见 |
-| `opacity` | number | 是 | 填充/描边透明度 |
-| `color` | string | 否 | HEX 颜色（仅 `solid`），如 `"#FF5733FF"`（含 Alpha）|
-| `stops` | ColorStop[] | 否 | 渐变色标（仅渐变类型），见 [ColorStop](#colorstop) |
-| `image_hash` | string | 否 | 图片 hash（仅 Fill `image` 类型，Stroke 不支持）|
+| 字段 | 类型 | 必选 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `type` | string | 否 | `"solid"` | Fill：`"solid"` / `"gradient_linear"` / `"gradient_radial"` / `"image"`；Stroke：`"solid"` / `"gradient_linear"` / `"gradient_radial"` |
+| `visible` | boolean | 否 | `true` | 是否可见 |
+| `opacity` | number | 否 | `1` | 填充/描边透明度 |
+| `color` | string | 否 | `"#000000FF"` | HEX 颜色（仅 `solid`），如 `"#FF5733FF"`（含 Alpha）|
+| `stops` | ColorStop[] | 否 | — | 渐变色标（仅渐变类型），见 [ColorStop](#colorstop) |
+| `image_hash` | string | 否 | — | 图片 hash（仅 Fill `image` 类型，Stroke 不支持）|
 
 ---
 
@@ -223,16 +255,16 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 
 ## TextStyle
 
-| 字段 | 类型 | 必选 | 说明 |
-|---|---|---|---|
-| `font_family` | string | 是 | 字体名称 |
-| `font_style` | string | 是 | 字重/样式，如 `"Regular"` / `"Bold"` / `"Medium"` |
-| `font_size` | number | 是 | 字号（px）|
-| `color` | string | 是 | 文字颜色（HEX + Alpha）|
-| `letter_spacing` | number | 是 | 字间距 |
-| `line_height` | number \| string | 是 | 行高（px 或 `"auto"`）|
-| `align_h` | string | 是 | 水平对齐：`"left"` / `"center"` / `"right"` / `"justified"` |
-| `align_v` | string | 是 | 垂直对齐：`"top"` / `"center"` / `"bottom"` |
+| 字段 | 类型 | 必选 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `font_family` | string | 否 | `"HarmonyHeiTi"` | 字体名称；传空字符串时也使用默认值 |
+| `font_style` | string | 否 | `"Regular"` | 字重/样式，如 `"Regular"` / `"Bold"` / `"Medium"`；传空字符串时也使用默认值 |
+| `font_size` | number | 否 | `14` | 字号（px）|
+| `color` | string | 否 | `"#0F172AFF"` | 文字颜色（HEX + Alpha）|
+| `letter_spacing` | number | 否 | `0` | 字间距（px）|
+| `line_height` | number \| string | 否 | `"auto"` | 行高（px 或 `"auto"`）|
+| `align_h` | string | 否 | `"left"` | 水平对齐：`"left"` / `"center"` / `"right"` / `"justified"` |
+| `align_v` | string | 否 | `"top"` | 垂直对齐：`"top"` / `"center"` / `"bottom"` |
 
 ---
 
@@ -260,24 +292,50 @@ Fill 和 Stroke 字段结构基本相同，但 Stroke 不支持 `image` 类型�
 
 ### table 字段
 
-| 字段 | 类型 | 必选 | 说明 |
-|---|---|---|---|
-| `col_width` | number | 否 | 统一列宽（px）。为 `0` 时自动按 `box.width / 列数` 均分；`col_widths` 未指定的列使用此值 |
-| `col_widths` | number[] | 否 | 各列宽度数组（px），与 `headers` 一一对应。数组长度不足时，剩余列使用 `col_width` 或模版默认值 |
-| `row_height` | number | 否 | 数据行高（px）。为 `0` 时沿用模版默认值 |
-| `header_height` | number | 否 | 表头行高（px）。为 `0` 时沿用模版默认值 |
-| `show_checkbox` | boolean | 否 | 是否显示多选框列，默认 `false`。为 `true` 时表格左侧增加一列多选框（需表格模版支持）|
-| `headers` | (string \| Layer)[] | 是 | 列头描述列表，长度决定列数。元素为 `string` 时渲染为纯文本；为 `Layer` 时按图层类型渲染（支持 `text` / `frame` / `instance` 等），规则与单元格完全相同 |
-| `rows` | Layer[][] | 是 | 数据行列表，每行是一个 `Layer` 数组（每格一个完整图层，支持 text / frame / instance 等任意类型）|
+| 字段 | 类型 | 必选 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `col_width` | number | 否 | `0` | 统一列宽（px）。为 `0` 时自动按 `box.width / 列数` 均分；`col_widths` 未指定的列使用此值 |
+| `col_widths` | number[] | 否 | `[]` | 各列宽度数组（px），与 `headers` 一一对应。数组长度不足时，剩余列使用 `col_width` 或模版默认值 |
+| `row_height` | number | 否 | `0` | 数据行高（px）。为 `0` 时沿用模版默认值（模版中 `.$Table-Cell` 的高度，通常约 43px）|
+| `header_height` | number | 否 | `0` | 表头行高（px）。为 `0` 时沿用模版默认值（模版中 `.$Table-Col-Header` 的高度，通常约 36px）|
+| `show_checkbox` | boolean | 否 | `false` | 是否显示多选框列。为 `true` 时表格左侧增加一列多选框（需表格模版支持）|
+| `headers` | (string \| Layer)[] | 是 | — | 列头描述列表，长度决定列数。支持**普通格式**和 **DSL 格式**，见下方说明 |
+| `rows` | Layer[][] | 是 | — | 数据行列表，每行是一个 Layer 数组（每格一个完整 DSL 格式图层，支持 text / frame / instance 等任意类型）|
+
+### headers：普通格式 vs DSL 格式
+
+`headers` 中每个元素可以是以下两种格式之一，可以混用：
+
+**普通格式**（纯文本列头）：传入字符串，转换器使用模版中的 TEXT 节点渲染文字，样式完全由模版决定。
+
+```json
+"headers": ["应用名称", "状态", "版本号", "操作"]
+```
+
+**DSL 格式**（富类型列头）：传入完整 Layer 对象（`type` 非空），支持 `text` / `frame` / `instance` 等任意类型。转换器会先克隆模版中的非 TEXT 背景子节点（如 RECT "bg"），再将 DSL Layer 树追加为列头内容。
+
+```json
+"headers": [
+  "状态",
+  {
+    "type": "frame",
+    "name": "header-action",
+    "visible": true, "opacity": 1, "blend_mode": "normal",
+    "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
+    "auto_layout": { "direction": "horizontal", "gap": 6, "padding": [0,0,0,16], "align_items": "center", "justify_content": "min", "wrap": false },
+    "children": [...]
+  }
+]
+```
 
 ### 单元格对齐字段（rows 中每个 Layer 可选）
 
 以下两个字段写在单元格 Layer 的**顶层**（与 `type`、`name` 同级），控制 `.$Table-Cell` 容器的自动布局对齐。不填则完全沿用模版默认值。
 
-| 字段 | 类型 | 取值 | 说明 |
-|---|---|---|---|
-| `cell_align_h` | string | `"left"` / `"center"` / `"right"` | 水平对齐。映射到 `stackJustify`（水平布局）或 `stackCounterAlign`（垂直布局）|
-| `cell_align_v` | string | `"top"` / `"center"` / `"bottom"` | 垂直对齐。映射到 `stackCounterAlign`（水平布局）或 `stackJustify`（垂直布局）|
+| 字段 | 类型 | 取值 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `cell_align_h` | string | `"left"` / `"center"` / `"right"` | 模版值 | 水平对齐。映射到 `stackJustify`（水平布局）或 `stackCounterAlign`（垂直布局）|
+| `cell_align_v` | string | `"top"` / `"center"` / `"bottom"` | 模版值 | 垂直对齐。映射到 `stackCounterAlign`（水平布局）或 `stackJustify`（垂直布局）|
 
 > 注意：`cell_align_h/v` 控制的是容器（`.$Table-Cell` 或 `.$Table-Col-Header`）的布局对齐，即**内容节点在格子内的位置**，与 `text_style.align_h/v`（文字行在文本框内的对齐）语义不同，两者可独立配置。内容节点的实际尺寸由 DSL `box` 决定；若内容尺寸小于格子，`cell_align_h/v` 才能产生可见的定位效果。`headers` 中的列头 Layer 同样支持此字段。
 
@@ -288,7 +346,7 @@ col_widths[ci] > 0        → 使用该列指定宽度
 col_widths 长度不足       → 剩余列使用 col_width
 col_width > 0            → 所有列统一宽度
 col_width = 0            → box.width / 列数（自动均分）
-box.width 也为 0         → 使用模版默认列宽
+box.width 也为 0         → 使用模版默认列宽（约 409px）
 ```
 
 `row_height` 和 `header_height` 同理，无法从 `box.height` 自动推算（因为行数不固定），为 `0` 时直接使用模版默认值。
@@ -296,7 +354,7 @@ box.width 也为 0         → 使用模版默认列宽
 ### 约束
 
 - 表格图层**不含 `children` 字段**，单元格内容通过 `rows` 传入
-- 每格（cell）是一个完整的 `Layer`，其节点 GUID 由转换器内部自动分配，`id` 字段可省略
+- 每格（cell）是一个完整的 DSL 格式 Layer，其节点 GUID 由转换器内部自动分配，`id` 字段可省略
 - 表格视觉风格完全由 `--table-template` 指定的 hex 文件控制；若未传入模版，表格节点将被替换为一个不可见的占位 FRAME
 - `show_checkbox: true` 时，表格左侧自动增加一列多选框，视觉样式由模版中的 `.$Table-Column`（无 Cell 后代）节点提供
 
@@ -326,7 +384,7 @@ box.width 也为 0         → 使用模版默认列宽
           "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
           "text_content": "设计协作平台",
           "text_style": {
-            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_family": "HarmonyHeiTi", "font_style": "Regular",
             "font_size": 14, "color": "#1E293BFF",
             "letter_spacing": 0, "line_height": 48,
             "align_h": "left", "align_v": "center"
@@ -352,7 +410,7 @@ box.width 也为 0         → 使用模版默认列宽
           "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
           "text_content": "v2.4.1",
           "text_style": {
-            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_family": "HarmonyHeiTi", "font_style": "Regular",
             "font_size": 14, "color": "#595959FF",
             "letter_spacing": 0, "line_height": 48,
             "align_h": "left", "align_v": "center"
@@ -388,7 +446,7 @@ box.width 也为 0         → 使用模版默认列宽
               "box": { "x": 0, "y": 0, "width": 28, "height": 24 },
               "text_content": "编辑",
               "text_style": {
-                "font_family": "PingFang SC", "font_style": "Regular",
+                "font_family": "HarmonyHeiTi", "font_style": "Regular",
                 "font_size": 14, "color": "#1677FFFF",
                 "letter_spacing": 0, "line_height": 24,
                 "align_h": "left", "align_v": "center"
@@ -455,7 +513,7 @@ box.width 也为 0         → 使用模版默认列宽
             "box": { "x": 0, "y": 0, "width": 56, "height": 48 },
             "text_content": "设置",
             "text_style": {
-              "font_family": "PingFang SC", "font_style": "Regular",
+              "font_family": "HarmonyHeiTi", "font_style": "Regular",
               "font_size": 14, "color": "#1E293BFF",
               "letter_spacing": 0, "line_height": 48,
               "align_h": "left", "align_v": "center"
@@ -488,7 +546,7 @@ box.width 也为 0         → 使用模版默认列宽
               "box": { "x": 0, "y": 0, "width": 28, "height": 48 },
               "text_content": "活着",
               "text_style": {
-                "font_family": "PingFang SC", "font_style": "Regular",
+                "font_family": "HarmonyHeiTi", "font_style": "Regular",
                 "font_size": 14, "color": "#52C41AFF",
                 "letter_spacing": 0, "line_height": 48,
                 "align_h": "left", "align_v": "center"
@@ -502,7 +560,7 @@ box.width 也为 0         → 使用模版默认列宽
           "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
           "text_content": "设计协作平台",
           "text_style": {
-            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_family": "HarmonyHeiTi", "font_style": "Regular",
             "font_size": 14, "color": "#1E293BFF",
             "letter_spacing": 0, "line_height": 48,
             "align_h": "left", "align_v": "center"
@@ -514,7 +572,7 @@ box.width 也为 0         → 使用模版默认列宽
           "box": { "x": 0, "y": 0, "width": 240, "height": 48 },
           "text_content": "v2.4.1",
           "text_style": {
-            "font_family": "PingFang SC", "font_style": "Regular",
+            "font_family": "HarmonyHeiTi", "font_style": "Regular",
             "font_size": 14, "color": "#595959FF",
             "letter_spacing": 0, "line_height": 48,
             "align_h": "left", "align_v": "center"
@@ -620,7 +678,7 @@ box.width 也为 0         → 使用模版默认列宽
               "box": { "x": 16, "y": 16, "width": 200, "height": 24 },
               "text_content": "用户名",
               "text_style": {
-                "font_family": "HarmonyOS Sans",
+                "font_family": "HarmonyHeiTi",
                 "font_style": "Bold",
                 "font_size": 16,
                 "color": "#1A1A1AFF",

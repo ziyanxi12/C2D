@@ -45,6 +45,7 @@ if (rawArgs.length < 2) {
 // 解析参数
 let outDir    = '';
 let batchSize = 20;
+let retryMode = false;
 const positional = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -52,6 +53,8 @@ for (let i = 0; i < rawArgs.length; i++) {
         outDir = path.resolve(rawArgs[++i]);
     } else if (rawArgs[i] === '--batch' && i + 1 < rawArgs.length) {
         batchSize = parseInt(rawArgs[++i], 10) || 20;
+    } else if (rawArgs[i] === '--retry') {
+        retryMode = true;
     } else {
         positional.push(rawArgs[i]);
     }
@@ -73,6 +76,12 @@ if (!fs.existsSync(baseDir)) {
 if (!outDir) outDir = path.join(__dirname, 'output');
 fs.mkdirSync(outDir, { recursive: true });
 
+// guid 格式 "8229:277395" → fallback key "8229_277395"
+function resolveKey(hash, guid) {
+    if (hash && hash.length > 0) return hash;
+    return (guid || '').replace(':', '_');
+}
+
 // 从 index.json 读取所有组件名（按 nameFilter 过滤）
 function resolveNames(indexPath, nameFilter) {
     const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
@@ -90,6 +99,28 @@ function resolveNames(indexPath, nameFilter) {
     return names;
 }
 
+// --retry 模式：找出 outDir 里缺失的变体，返回需要重跑的父组件名列表
+function resolveRetryNames(indexPath, outDir) {
+    const index   = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    const present = new Set(
+        fs.readdirSync(outDir).filter(f => f.endsWith('.hex')).map(f => f.slice(0, -4))
+    );
+    const names = new Set();
+    for (const cs of (index.componentSets || [])) {
+        for (const v of (cs.variants || [])) {
+            if (!present.has(resolveKey(v.variantKey, v.guid))) {
+                names.add(cs.name);
+            }
+        }
+    }
+    for (const sc of (index.standaloneComponents || [])) {
+        if (!present.has(resolveKey(sc.componentKey, sc.guid))) {
+            names.add(sc.name);
+        }
+    }
+    return [...names];
+}
+
 function chunk(arr, size) {
     const result = [];
     for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
@@ -100,13 +131,25 @@ function chunk(arr, size) {
 // 执行
 // =============================================================================
 
-const allNames = resolveNames(indexPath, nameFilter);
-const batches  = chunk(allNames, batchSize);
+const allNames = retryMode
+    ? resolveRetryNames(indexPath, outDir)
+    : resolveNames(indexPath, nameFilter);
+
+if (retryMode && allNames.length === 0) {
+    console.log('✓ 没有缺失的变体，无需重跑');
+    process.exit(0);
+}
+
+const batches = chunk(allNames, batchSize);
 
 console.log('=== compset_instantiate ===');
 console.log('index  :', indexPath);
 console.log('base   :', baseDir);
-console.log('filter :', nameFilter.length === 0 ? '(全部)' : nameFilter.join(', '));
+if (retryMode) {
+    console.log('模式   : --retry（仅重跑缺失变体）');
+} else {
+    console.log('filter :', nameFilter.length === 0 ? '(全部)' : nameFilter.join(', '));
+}
 console.log('outdir :', outDir);
 console.log(`共 ${allNames.length} 个组件，分 ${batches.length} 批（每批 ${batchSize}）`);
 console.log('');

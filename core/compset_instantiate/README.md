@@ -22,17 +22,20 @@ node index.js \
 # 同时处理 componentSets 和 standaloneComponents
 node index.js component_index.json base_dir "文字链接" "2.拖拽把手"
 
-# 不传名称 = 处理全部（componentSets 的所有变体 + 所有 standaloneComponents）
+# 不传名称 = 处理全部（分批，每批默认 20 个组件）
 node index.js component_index.json base_dir
 
 # 指定输出目录
 node index.js component_index.json base_dir "文字链接" --outdir /tmp/instances
+
+# 调整每批大小（数量大时建议 10~20）
+node index.js component_index.json base_dir --batch 10
 ```
 
 ## 命令格式
 
 ```
-node index.js <component_index.json> <base_dir> [名称过滤...] [--outdir <dir>]
+node index.js <component_index.json> <base_dir> [名称过滤...] [--outdir <dir>] [--batch <n>]
 ```
 
 | 参数 | 必填 | 说明 |
@@ -41,6 +44,7 @@ node index.js <component_index.json> <base_dir> [名称过滤...] [--outdir <dir
 | `base_dir` | ✓ | hex 文件路径基准目录，`hexFile` 字段相对于此目录解析 |
 | `[名称过滤...]` | — | 按 `name` 字段过滤，同时匹配 componentSets 和 standaloneComponents；不传则处理全部 |
 | `--outdir <dir>` | — | 输出目录；默认 `core/compset_instantiate/output/` |
+| `--batch <n>` | — | 每批处理的组件数量；默认 20 |
 
 ## 输出文件结构
 

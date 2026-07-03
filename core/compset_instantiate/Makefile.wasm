@@ -1,0 +1,60 @@
+EMCC = $(HOME)/emsdk-main/python/3.13.3_64bit/bin/python3 $(HOME)/emsdk-main/upstream/emscripten/emcc.py
+
+ZSTD_SRCS = \
+	../lib/zstd-1.5.6/lib/common/debug.c \
+	../lib/zstd-1.5.6/lib/common/entropy_common.c \
+	../lib/zstd-1.5.6/lib/common/error_private.c \
+	../lib/zstd-1.5.6/lib/common/fse_decompress.c \
+	../lib/zstd-1.5.6/lib/common/pool.c \
+	../lib/zstd-1.5.6/lib/common/threading.c \
+	../lib/zstd-1.5.6/lib/common/xxhash.c \
+	../lib/zstd-1.5.6/lib/common/zstd_common.c \
+	../lib/zstd-1.5.6/lib/decompress/huf_decompress.c \
+	../lib/zstd-1.5.6/lib/decompress/zstd_ddict.c \
+	../lib/zstd-1.5.6/lib/decompress/zstd_decompress.c \
+	../lib/zstd-1.5.6/lib/decompress/zstd_decompress_block.c \
+	../lib/zstd-1.5.6/lib/compress/fse_compress.c \
+	../lib/zstd-1.5.6/lib/compress/hist.c \
+	../lib/zstd-1.5.6/lib/compress/huf_compress.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_compress.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_compress_literals.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_compress_sequences.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_compress_superblock.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_double_fast.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_fast.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_lazy.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_ldm.c \
+	../lib/zstd-1.5.6/lib/compress/zstd_opt.c
+
+TARGET   = compset_instantiate
+BIN_JS   = bin/$(TARGET).js
+BIN_WASM = bin/$(TARGET).wasm
+ZSTD_OBJS = $(ZSTD_SRCS:.c=.wasm.o)
+
+all: bin $(BIN_JS)
+
+bin:
+	mkdir -p bin
+
+%.wasm.o: %.c
+	$(EMCC) -O2 -I../lib/zstd-1.5.6/lib -c -o $@ $<
+
+$(BIN_JS): compset_instantiate_wasm.cpp $(ZSTD_OBJS)
+	$(EMCC) -std=c++17 -O2 \
+		-I../lib -I../lib/kiwi-master -I../lib/zstd-1.5.6/lib \
+		--bind \
+		-s WASM=1 \
+		-s MODULARIZE=1 \
+		-s EXPORT_NAME="CompsetInstantiate" \
+		-s ALLOW_MEMORY_GROWTH=1 \
+		-s INITIAL_MEMORY=67108864 \
+		-s NODERAWFS=1 \
+		-s ENVIRONMENT='node' \
+		-o $(BIN_JS) \
+		compset_instantiate_wasm.cpp $(ZSTD_OBJS)
+	@echo "✓ 生成: $(BIN_JS) + $(BIN_WASM)"
+
+clean:
+	rm -f $(BIN_JS) $(BIN_WASM) $(ZSTD_OBJS)
+
+.PHONY: all bin clean

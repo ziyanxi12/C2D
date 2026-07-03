@@ -112,21 +112,23 @@ console.log(`共 ${allNames.length} 个组件，分 ${batches.length} 批（每�
 console.log('');
 
 CompsetInstantiate().then(mod => {
-    const t0           = Date.now();
-    let totalWritten   = 0;
-    let totalFailed    = 0;
+    const t0         = Date.now();
+    let totalWritten = 0;
+    const failures   = [];   // { batch, name, key, reason }
 
     for (let bi = 0; bi < batches.length; bi++) {
         const batch = batches[bi];
         console.log(`── 批次 ${bi + 1}/${batches.length}  [${batch.join(' | ')}]`);
 
-        const bt     = Date.now();
+        const bt = Date.now();
         let result;
         try {
             result = mod.instantiateCompSet(indexPath, baseDir, batch.join(','));
         } catch (e) {
             console.error(`  ✗ WASM 异常: ${e.message}`);
-            totalFailed += batch.length;
+            for (const name of batch) {
+                failures.push({ batch: bi + 1, name, key: '', reason: `WASM 异常: ${e.message}` });
+            }
             console.log('');
             continue;
         }
@@ -136,8 +138,11 @@ CompsetInstantiate().then(mod => {
         if (result.startsWith('{')) {
             let parsed;
             try { parsed = JSON.parse(result); } catch (_) { parsed = { error: result }; }
-            console.error(`  ✗ 批次失败: ${parsed.error || result}`);
-            totalFailed += batch.length;
+            const reason = parsed.error || result;
+            console.error(`  ✗ 批次失败: ${reason}`);
+            for (const name of batch) {
+                failures.push({ batch: bi + 1, name, key: '', reason: `批次失败: ${reason}` });
+            }
             console.log('');
             continue;
         }
@@ -146,7 +151,9 @@ CompsetInstantiate().then(mod => {
         let items;
         try { items = JSON.parse(result); } catch (e) {
             console.error(`  ✗ 解析失败: ${e.message}`);
-            totalFailed += batch.length;
+            for (const name of batch) {
+                failures.push({ batch: bi + 1, name, key: '', reason: `JSON 解析失败: ${e.message}` });
+            }
             console.log('');
             continue;
         }
@@ -162,22 +169,31 @@ CompsetInstantiate().then(mod => {
                 batchOk++;
             } catch (e) {
                 console.error(`  ✗ ${item.name}  [${item.key}]  写入失败: ${e.message}`);
+                failures.push({ batch: bi + 1, name: item.name, key: item.key, reason: `写入失败: ${e.message}` });
                 batchErr++;
             }
         }
 
         totalWritten += batchOk;
-        totalFailed  += batchErr;
         console.log(`  批次完成: ${batchOk} 成功  ${batchErr} 失败  耗时 ${wasmMs} ms`);
         console.log('');
     }
 
     const totalMs = Date.now() - t0;
     console.log('=== 汇总 ===');
-    console.log(`成功: ${totalWritten}  失败: ${totalFailed}  总耗时: ${totalMs} ms`);
+    console.log(`成功: ${totalWritten}  失败: ${failures.length}  总耗时: ${totalMs} ms`);
     console.log(`输出: ${outDir}`);
 
-    if (totalFailed > 0) process.exit(1);
+    if (failures.length > 0) {
+        const logPath = path.join(outDir, 'failed.log');
+        const lines   = failures.map(f =>
+            `[批次${f.batch}] ${f.name}${f.key ? '  key=' + f.key : ''}  原因: ${f.reason}`
+        );
+        fs.writeFileSync(logPath, lines.join('\n') + '\n', 'utf8');
+        console.log(`\n失败记录: ${logPath}`);
+        console.log(lines.map(l => '  ' + l).join('\n'));
+        process.exit(1);
+    }
 
 }).catch(err => {
     console.error('WASM 初始化失败:', err);

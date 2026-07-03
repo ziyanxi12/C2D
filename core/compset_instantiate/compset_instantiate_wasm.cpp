@@ -1,7 +1,7 @@
 // compset_instantiate_wasm.cpp
-// WASM 导出入口：从 component_index.json + hex 组件集生成变体实例 hex 文件
+// WASM 导出入口：从 component_index.json + hex 组件集为每个变体生成独立 hex 文件
 //
-// NODERAWFS=1：fopen/fread/fwrite 直接路由 Node.js fs，无需虚拟文件系统
+// NODERAWFS=1：fopen/fread 直接路由 Node.js fs
 
 #define IMPLEMENT_KIWI_H
 #define IMPLEMENT_SCHEMA_H
@@ -15,7 +15,7 @@
 #include "../dsl_to_hex/dsl_core.h"
 
 // =============================================================================
-// 数据结构（与 compset_instantiate.cpp 相同）
+// 数据结构
 // =============================================================================
 
 struct VariantInfo {
@@ -48,7 +48,6 @@ static std::vector<CompSetEntry> parseIndex(const char *path) {
         CompSetEntry entry;
         entry.name    = cs.get("name").asStr();
         entry.hexFile = cs.get("hexFile").asStr();
-
         const JVal &vars = cs.get("variants");
         for (size_t j = 0; j < vars.size(); j++) {
             const JVal &v = vars[j];
@@ -74,6 +73,7 @@ static std::string jsonStr(const std::string &s) {
         if      (c == '"')  out += "\\\"";
         else if (c == '\\') out += "\\\\";
         else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
         else                out += c;
     }
     return out + "\"";
@@ -84,17 +84,177 @@ static std::string errJson(const std::string &msg) {
 }
 
 // =============================================================================
+// 为单个变体构建 hex 字符串
+//
+// 输出节点结构：
+//   CANVAS {0,1}               ← 可见画布
+//     INSTANCE {dslS,1}        ← 该变体的实例
+//   CANVAS {0,2} internalOnly  ← 组件库挂载点
+//     <compset 全量节点（去 CANVAS，孤根改挂 {0,2}）>
+// =============================================================================
+
+static std::string buildOneVariantHex(
+        const VariantInfo    &vi,
+        const PixsoNode      *symNode,
+        const CompSetData    &cs,
+        const ChildrenMap    &cm,
+        uint32_t              dslSession)   // max(compset session) + 1
+{
+    // 统计 compset 节点（跳过 CANVAS，GUID 去重）
+    auto *csNodes = cs.msg.pixsoNodes();
+    uint32_t compCount = 0;
+    std::set<std::string> seenGuids;
+    if (csNodes) {
+        for (uint32_t i = 0; i < csNodes->size(); i++) {
+            const PixsoNode &n = (*csNodes)[i];
+            if (n.type() && *n.type() == NodeType::CANVAS) continue;
+            uint32_t s = (n.guid() && n.guid()->sessionID()) ? *n.guid()->sessionID() : 0;
+            uint32_t l = (n.guid() && n.guid()->localID())   ? *n.guid()->localID()   : 0;
+            if (seenGuids.insert(gkStr(s, l)).second) compCount++;
+        }
+    }
+
+    uint32_t total = 1 + 1 + 1 + compCount; // 可见CANVAS + INSTANCE + 隐藏CANVAS + compset
+
+    kiwi::MemoryPool pool;
+    PixsoMsg out;
+    out.set_type(PixsoMsgType::FIC_DOCUMENT);
+    auto &arr = out.set_pixsoNodes(pool, total);
+    uint32_t idx = 0;
+
+    // 可见 CANVAS {0,1}
+    {
+        PixsoNode &cv = arr[idx++];
+        cv.set_type(NodeType::CANVAS);
+        cv.set_phase(NodePhase::CREATED);
+        cv.set_guid(makeGUID(pool, 0, 1));
+        cv.set_name(pool.string(vi.name.c_str()));
+        cv.set_parentIndex(makeParent(pool, 0, 0, "!"));
+    }
+
+    // INSTANCE {dslSession, 1}
+    {
+        PixsoNode &n = arr[idx++];
+        n.set_type(NodeType::INSTANCE);
+        n.set_phase(NodePhase::CREATED);
+        n.set_guid(makeGUID(pool, dslSession, 1));
+        n.set_name(pool.string(vi.name.c_str()));
+        n.set_visible(true);
+        n.set_parentIndex(makeParent(pool, 0, 1, makePos(0)));
+
+        Matrix *mat = pool.allocate<Matrix>(); new(mat) Matrix();
+        mat->set_m00(1.f); mat->set_m01(0.f); mat->set_m02(0.f);
+        mat->set_m10(0.f); mat->set_m11(1.f); mat->set_m12(0.f);
+        n.set_transform(mat);
+
+        float w = 0.f, h = 0.f;
+        if (symNode->size()) {
+            if (symNode->size()->x() && *symNode->size()->x() > 0) w = *symNode->size()->x();
+            if (symNode->size()->y() && *symNode->size()->y() > 0) h = *symNode->size()->y();
+        }
+        Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
+        sz->set_x(w); sz->set_y(h);
+        n.set_size(sz);
+
+        SymbolData *sd = pool.allocate<SymbolData>(); new(sd) SymbolData();
+        sd->set_symbolID(makeGUID(pool, vi.guidS, vi.guidL));
+        n.set_symbolData(sd);
+
+        // derivedSymbolData
+        uint32_t cnt = computeDerivedCount(*symNode, cm);
+        if (cnt > 0) {
+            auto &dsd = n.set_derivedSymbolData(pool, cnt);
+            uint32_t dsdIdx = 0;
+            std::vector<std::pair<uint32_t,uint32_t>> path;
+            fillDerivedSlots(pool, dsd, dsdIdx, *symNode, cm, path);
+        }
+    }
+
+    // 隐藏 CANVAS {0,2}
+    {
+        PixsoNode &hv = arr[idx++];
+        hv.set_type(NodeType::CANVAS);
+        hv.set_phase(NodePhase::CREATED);
+        hv.set_guid(makeGUID(pool, 0, 2));
+        hv.set_name(pool.string("Internal Only Canvas"));
+        hv.set_internalOnly(true);
+        hv.set_parentIndex(makeParent(pool, 0, 0, "~"));
+    }
+
+    // compset 全量节点（孤根改挂 {0,2}，每个文件独立，无需 blob 重映射）
+    if (csNodes) {
+        // 本组件集非 CANVAS 节点的 GUID 集合（用于孤根判断）
+        std::set<std::pair<uint32_t,uint32_t>> guidSet;
+        for (uint32_t i = 0; i < csNodes->size(); i++) {
+            const PixsoNode &n = (*csNodes)[i];
+            if (n.type() && *n.type() == NodeType::CANVAS) continue;
+            if (n.guid() && n.guid()->sessionID() && n.guid()->localID())
+                guidSet.insert({*n.guid()->sessionID(), *n.guid()->localID()});
+        }
+
+        std::set<std::string> written;
+        for (uint32_t i = 0; i < csNodes->size(); i++) {
+            const PixsoNode &orig = (*csNodes)[i];
+            if (orig.type() && *orig.type() == NodeType::CANVAS) continue;
+
+            uint32_t gs = (orig.guid() && orig.guid()->sessionID()) ? *orig.guid()->sessionID() : 0;
+            uint32_t gl = (orig.guid() && orig.guid()->localID())   ? *orig.guid()->localID()   : 0;
+            if (!written.insert(gkStr(gs, gl)).second) continue;
+
+            bool parentInSet = false;
+            if (orig.parentIndex() && orig.parentIndex()->guid()) {
+                auto *pg = orig.parentIndex()->guid();
+                uint32_t ps = pg->sessionID() ? *pg->sessionID() : 0;
+                uint32_t pl = pg->localID()   ? *pg->localID()   : 0;
+                parentInSet = guidSet.count({ps, pl}) > 0;
+            }
+
+            arr[idx] = orig;
+            if (!parentInSet)
+                arr[idx].set_parentIndex(makeParent(pool, 0, 2, "a0"));
+            idx++;
+        }
+    }
+
+    // blobs：直接从该 compset 原始数据复制，无需重映射
+    auto *csBlobs = cs.msg.blobs();
+    if (csBlobs && csBlobs->size() > 0) {
+        auto &outBlobs = out.set_blobs(pool, csBlobs->size());
+        for (uint32_t i = 0; i < csBlobs->size(); i++) {
+            const auto *bytes = (*csBlobs)[i].bytes();
+            if (bytes && bytes->size() > 0) {
+                auto &dst = outBlobs[i].set_bytes(pool, bytes->size());
+                for (uint32_t j = 0; j < bytes->size(); j++) dst[j] = (*bytes)[j];
+            }
+        }
+    }
+
+    kiwi::ByteBuffer bb;
+    if (!out.encode(bb)) return "";
+
+    std::vector<uint8_t> kiwiBin(bb.data(), bb.data() + bb.size());
+    auto pixData = compressToPix(kiwiBin);
+    if (pixData.empty()) return "";
+
+    return "<!-- pixso binary data -->\n" + bytesToHex(pixData);
+}
+
+// =============================================================================
 // WASM 导出函数
 //
-// instantiateCompSet(indexPath, baseDir, setNames) → hexString | errorJSON
+// instantiateCompSet(indexPath, baseDir, setNames) → JSON 数组 | error JSON
 //
 //   indexPath : component_index.json 的绝对路径
-//   baseDir   : hexFile 的基准目录（通常是 index 所在目录的父目录）
+//   baseDir   : hexFile 字段的基准目录
 //   setNames  : 逗号分隔的组件集名称（空字符串 = 全部）
 //
-// 返回：
-//   成功: "<!-- pixso binary data -->\n<hex>"
-//   失败: {"error":"...","variants":N,"nodes":N}   （JSON，以 { 开头）
+// 成功返回 JSON 数组，每个元素对应一个变体：
+//   [
+//     { "setName":"文字链接", "variantName":"status=...", "guid":"8229:277395", "hex":"<!-- ...\n<hexdata>" },
+//     ...
+//   ]
+//
+// 失败返回：{"error":"..."}
 // =============================================================================
 
 std::string instantiateCompSet(const std::string &indexPath,
@@ -104,7 +264,7 @@ std::string instantiateCompSet(const std::string &indexPath,
 
     // 解析名称过滤列表（逗号分隔）
     std::set<std::string> nameFilter;
-    if (!setNames.empty()) {
+    {
         std::string cur;
         for (char c : setNames) {
             if (c == ',') { if (!cur.empty()) { nameFilter.insert(cur); cur.clear(); } }
@@ -113,18 +273,18 @@ std::string instantiateCompSet(const std::string &indexPath,
         if (!cur.empty()) nameFilter.insert(cur);
     }
 
-    // 1. 解析索引
+    // 解析索引
     auto allEntries = parseIndex(indexPath.c_str());
     if (allEntries.empty()) return errJson("failed to parse index: " + indexPath);
 
-    // 2. 过滤
+    // 过滤
     std::vector<CompSetEntry *> selected;
     for (auto &e : allEntries)
         if (nameFilter.empty() || nameFilter.count(e.name))
             selected.push_back(&e);
     if (selected.empty()) return errJson("no matching component sets");
 
-    // 3. 加载 hex 文件
+    // 加载 hex 文件
     std::vector<std::unique_ptr<CompSetData>> compSets;
     std::map<CompSetEntry *, CompSetData *>   entryToCS;
     std::string bd = baseDir;
@@ -142,7 +302,7 @@ std::string instantiateCompSet(const std::string &indexPath,
     }
     if (compSets.empty()) return errJson("no component sets loaded");
 
-    // 4. 建 SymbolMap 和 ChildrenMap
+    // 建 SymbolMap 和 ChildrenMap
     std::map<std::string, std::pair<CompSetData *, const PixsoNode *>> symMap;
     std::map<CompSetData *, ChildrenMap> childMaps;
     for (auto &cs : compSets) {
@@ -158,244 +318,63 @@ std::string instantiateCompSet(const std::string &indexPath,
         }
     }
 
-    // 5. 收集待实例化任务
-    struct InstTask {
-        std::string       variantName;
-        uint32_t          symS, symL;
-        const PixsoNode  *symNode;
-        const ChildrenMap *cm;
-    };
-    std::vector<InstTask> tasks;
+    // 计算各组件集的 dslSession（比自身最大 session 大 1）
+    std::map<CompSetData *, uint32_t> dslSessions;
+    for (auto &cs : compSets) {
+        uint32_t maxSess = 1;
+        auto *nodes = cs->msg.pixsoNodes();
+        if (nodes) {
+            for (uint32_t i = 0; i < nodes->size(); i++) {
+                const PixsoNode &n = (*nodes)[i];
+                if (n.guid() && n.guid()->sessionID())
+                    maxSess = std::max(maxSess, *n.guid()->sessionID());
+            }
+        }
+        dslSessions[cs.get()] = maxSess + 1;
+    }
+
+    // 逐变体生成 hex，拼接为 JSON 数组
+    std::string jsonOut = "[";
+    bool first = true;
+
     for (auto *entry : selected) {
         auto csIt = entryToCS.find(entry);
         if (csIt == entryToCS.end()) continue;
-        CompSetData *cs = csIt->second;
-        auto cmIt = childMaps.find(cs);
+        CompSetData *cs    = csIt->second;
+        auto cmIt          = childMaps.find(cs);
+        if (cmIt == childMaps.end()) continue;
+        const ChildrenMap &cm = cmIt->second;
+        uint32_t dslSess   = dslSessions[cs];
+
         for (auto &vi : entry->variants) {
             auto smIt = symMap.find(gkStr(vi.guidS, vi.guidL));
-            if (smIt == symMap.end()) continue;
-            InstTask t;
-            t.variantName = vi.name;
-            t.symS        = vi.guidS;
-            t.symL        = vi.guidL;
-            t.symNode     = smIt->second.second;
-            t.cm          = (cmIt != childMaps.end()) ? &cmIt->second : nullptr;
-            tasks.push_back(t);
-        }
-    }
-    if (tasks.empty()) return errJson("no variants to instantiate");
-
-    // 6. DSL session（max compset session + 1）
-    uint32_t maxSess = 1;
-    for (auto &cs : compSets) {
-        auto *nodes = cs->msg.pixsoNodes();
-        if (!nodes) continue;
-        for (uint32_t i = 0; i < nodes->size(); i++) {
-            const PixsoNode &n = (*nodes)[i];
-            if (n.guid() && n.guid()->sessionID())
-                maxSess = std::max(maxSess, *n.guid()->sessionID());
-        }
-    }
-    GuidCounter gc;
-    gc.session = maxSess + 1;
-    gc.local   = 0;
-
-    // 7. 合并 blobs
-    std::vector<std::vector<uint8_t>>                  mergedBlobs;
-    std::map<CompSetData *, std::map<int32_t,int32_t>> blobRemaps;
-    for (auto &cs : compSets) {
-        auto *blobs = cs->msg.blobs();
-        if (!blobs || blobs->size() == 0) continue;
-        auto   &remap  = blobRemaps[cs.get()];
-        int32_t offset = (int32_t)mergedBlobs.size();
-        for (uint32_t i = 0; i < blobs->size(); i++) {
-            remap[(int32_t)i] = offset + (int32_t)i;
-            const auto *bytes = (*blobs)[i].bytes();
-            if (bytes && bytes->size() > 0)
-                mergedBlobs.push_back(
-                    std::vector<uint8_t>(&(*bytes)[0], &(*bytes)[0] + bytes->size()));
-            else
-                mergedBlobs.push_back({});
-        }
-    }
-
-    // 8. 统计 compset 节点（全局去重，跳过 CANVAS）
-    uint32_t compNodeCount = 0;
-    {
-        std::set<std::string> seen;
-        for (auto &cs : compSets) {
-            auto *nodes = cs->msg.pixsoNodes();
-            if (!nodes) continue;
-            for (uint32_t i = 0; i < nodes->size(); i++) {
-                const PixsoNode &n = (*nodes)[i];
-                if (n.type() && *n.type() == NodeType::CANVAS) continue;
-                uint32_t s = (n.guid() && n.guid()->sessionID()) ? *n.guid()->sessionID() : 0;
-                uint32_t l = (n.guid() && n.guid()->localID())   ? *n.guid()->localID()   : 0;
-                if (seen.insert(gkStr(s, l)).second) compNodeCount++;
+            if (smIt == symMap.end()) {
+                fprintf(stderr, "[WARN] 变体 \"%s\" guid={%u,%u} 未找到，跳过\n",
+                        vi.name.c_str(), vi.guidS, vi.guidL);
+                continue;
             }
-        }
-    }
+            const PixsoNode *symNode = smIt->second.second;
 
-    uint32_t N     = (uint32_t)tasks.size();
-    uint32_t total = 1 + N + 1 + compNodeCount;
-
-    // 9. 构建 PixsoMsg
-    kiwi::MemoryPool pool;
-    PixsoMsg out;
-    out.set_type(PixsoMsgType::FIC_DOCUMENT);
-    auto &arr = out.set_pixsoNodes(pool, total);
-    uint32_t idx = 0;
-
-    // 可见 CANVAS {0,1}
-    {
-        PixsoNode &cv = arr[idx++];
-        cv.set_type(NodeType::CANVAS);
-        cv.set_phase(NodePhase::CREATED);
-        cv.set_guid(makeGUID(pool, 0, 1));
-        cv.set_name(pool.string("组件实例预览"));
-        cv.set_parentIndex(makeParent(pool, 0, 0, "!"));
-    }
-
-    // INSTANCE 节点（4 列网格，统一步长 = max 尺寸 + 20px 间距）
-    const int   COLS = 4;
-    const float GAP  = 20.0f;
-    float maxW = 10.0f, maxH = 10.0f;
-    for (auto &t : tasks) {
-        if (t.symNode->size()) {
-            if (t.symNode->size()->x() && *t.symNode->size()->x() > 0)
-                maxW = std::max(maxW, *t.symNode->size()->x());
-            if (t.symNode->size()->y() && *t.symNode->size()->y() > 0)
-                maxH = std::max(maxH, *t.symNode->size()->y());
-        }
-    }
-
-    for (uint32_t ti = 0; ti < N; ti++) {
-        const InstTask &t   = tasks[ti];
-        auto [nodeS, nodeL] = gc.next();
-
-        PixsoNode &n = arr[idx++];
-        n.set_type(NodeType::INSTANCE);
-        n.set_phase(NodePhase::CREATED);
-        n.set_guid(makeGUID(pool, nodeS, nodeL));
-        n.set_name(pool.string(t.variantName.c_str()));
-        n.set_visible(true);
-        n.set_parentIndex(makeParent(pool, 0, 1, makePos((int)ti)));
-
-        float x = (float)(ti % COLS) * (maxW + GAP);
-        float y = (float)(ti / COLS) * (maxH + GAP);
-        Matrix *mat = pool.allocate<Matrix>(); new(mat) Matrix();
-        mat->set_m00(1.f); mat->set_m01(0.f); mat->set_m02(x);
-        mat->set_m10(0.f); mat->set_m11(1.f); mat->set_m12(y);
-        n.set_transform(mat);
-
-        float w = maxW, h = maxH;
-        if (t.symNode->size()) {
-            if (t.symNode->size()->x() && *t.symNode->size()->x() > 0) w = *t.symNode->size()->x();
-            if (t.symNode->size()->y() && *t.symNode->size()->y() > 0) h = *t.symNode->size()->y();
-        }
-        Vector *sz = pool.allocate<Vector>(); new(sz) Vector();
-        sz->set_x(w); sz->set_y(h);
-        n.set_size(sz);
-
-        SymbolData *sd = pool.allocate<SymbolData>(); new(sd) SymbolData();
-        sd->set_symbolID(makeGUID(pool, t.symS, t.symL));
-        n.set_symbolData(sd);
-
-        if (t.cm) {
-            uint32_t cnt = computeDerivedCount(*t.symNode, *t.cm);
-            if (cnt > 0) {
-                auto &dsd = n.set_derivedSymbolData(pool, cnt);
-                uint32_t dsdIdx = 0;
-                std::vector<std::pair<uint32_t,uint32_t>> path;
-                fillDerivedSlots(pool, dsd, dsdIdx, *t.symNode, *t.cm, path);
-            }
-        }
-    }
-
-    // 隐藏 CANVAS {0,2}
-    {
-        PixsoNode &hv = arr[idx++];
-        hv.set_type(NodeType::CANVAS);
-        hv.set_phase(NodePhase::CREATED);
-        hv.set_guid(makeGUID(pool, 0, 2));
-        hv.set_name(pool.string("Internal Only Canvas"));
-        hv.set_internalOnly(true);
-        hv.set_parentIndex(makeParent(pool, 0, 0, "~"));
-    }
-
-    // compset 全量节点
-    {
-        std::set<std::string> writtenGuids;
-        for (auto &cs : compSets) {
-            auto *nodes = cs->msg.pixsoNodes();
-            if (!nodes) continue;
-            uint32_t M = nodes->size();
-
-            std::set<std::pair<uint32_t,uint32_t>> guidSet;
-            for (uint32_t i = 0; i < M; i++) {
-                const PixsoNode &n = (*nodes)[i];
-                if (n.type() && *n.type() == NodeType::CANVAS) continue;
-                if (n.guid() && n.guid()->sessionID() && n.guid()->localID())
-                    guidSet.insert({*n.guid()->sessionID(), *n.guid()->localID()});
+            std::string hex = buildOneVariantHex(vi, symNode, *cs, cm, dslSess);
+            if (hex.empty()) {
+                fprintf(stderr, "[WARN] 变体 \"%s\" 构建失败，跳过\n", vi.name.c_str());
+                continue;
             }
 
-            auto brmIt = blobRemaps.find(cs.get());
-            const std::map<int32_t,int32_t> *csRemap =
-                (brmIt != blobRemaps.end() && !brmIt->second.empty())
-                ? &brmIt->second : nullptr;
-
-            for (uint32_t i = 0; i < M; i++) {
-                const PixsoNode &orig = (*nodes)[i];
-                if (orig.type() && *orig.type() == NodeType::CANVAS) continue;
-
-                uint32_t gs = (orig.guid() && orig.guid()->sessionID()) ? *orig.guid()->sessionID() : 0;
-                uint32_t gl = (orig.guid() && orig.guid()->localID())   ? *orig.guid()->localID()   : 0;
-                if (!writtenGuids.insert(gkStr(gs, gl)).second) continue;
-
-                bool parentInSet = false;
-                if (orig.parentIndex() && orig.parentIndex()->guid()) {
-                    auto *pg = orig.parentIndex()->guid();
-                    uint32_t ps = pg->sessionID() ? *pg->sessionID() : 0;
-                    uint32_t pl = pg->localID()   ? *pg->localID()   : 0;
-                    parentInSet = guidSet.count({ps, pl}) > 0;
-                }
-
-                arr[idx] = orig;
-                if (!parentInSet)
-                    arr[idx].set_parentIndex(makeParent(pool, 0, 2, "a0"));
-                if (csRemap)
-                    remapBlobsInNode(arr[idx], *csRemap);
-                idx++;
-            }
+            if (!first) jsonOut += ",";
+            first = false;
+            jsonOut += "{\"setName\":"     + jsonStr(entry->name)
+                     + ",\"variantName\":" + jsonStr(vi.name)
+                     + ",\"guid\":\""      + std::to_string(vi.guidS) + ":" + std::to_string(vi.guidL) + "\""
+                     + ",\"hex\":"         + jsonStr(hex)
+                     + "}";
         }
     }
 
-    // blobs
-    if (!mergedBlobs.empty()) {
-        auto &outBlobs = out.set_blobs(pool, (uint32_t)mergedBlobs.size());
-        for (size_t i = 0; i < mergedBlobs.size(); i++) {
-            if (!mergedBlobs[i].empty()) {
-                auto &dstB = outBlobs[i].set_bytes(pool, (uint32_t)mergedBlobs[i].size());
-                for (size_t j = 0; j < mergedBlobs[i].size(); j++)
-                    dstB[j] = mergedBlobs[i][j];
-            }
-        }
-    }
-
-    // 10. 编码 → 压缩 → hex → 写文件
-    kiwi::ByteBuffer bb;
-    if (!out.encode(bb)) return errJson("kiwi encode failed");
-
-    std::vector<uint8_t> kiwiBin(bb.data(), bb.data() + bb.size());
-    auto pixData = compressToPix(kiwiBin);
-    if (pixData.empty()) return errJson("zstd compress failed");
-
-    // 返回 hex 字符串，由 JS 层写文件（避免 WASM fopen 中文路径问题）
-    return "<!-- pixso binary data -->\n" + bytesToHex(pixData);
+    jsonOut += "]";
+    return jsonOut;
 }
 
 EMSCRIPTEN_BINDINGS(compset_instantiate_wasm) {
-    // 3 参数：indexPath, baseDir, setNames（逗号分隔，空=全部）
-    // 返回 hex 字符串（成功）或 JSON error（失败）
     emscripten::function("instantiateCompSet", &instantiateCompSet);
 }

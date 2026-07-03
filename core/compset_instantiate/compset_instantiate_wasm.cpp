@@ -275,29 +275,29 @@ static std::string buildOneInstanceHex(
 // =============================================================================
 // WASM 导出函数
 //
-// instantiateCompSet(indexPath, baseDir, setNames) → JSON 数组 | error JSON
+// instantiateCompSet(indexPath, baseDir, setNames, tmpDir) → JSON 数组 | error JSON
 //
 //   indexPath : component_index.json 的绝对路径
 //   baseDir   : hexFile 字段的基准目录
 //   setNames  : 逗号分隔的名称过滤（空 = 全部，含 componentSets + standaloneComponents）
+//   tmpDir    : 临时输出目录（必须是 ASCII 路径，WASM 直接写文件到此处）
 //
-// 成功返回 JSON 数组，每个元素对应一个变体/独立组件：
+// 成功返回 JSON 数组，每个元素仅含元数据（hex 内容已写入 tmpDir/<key>.hex）：
 //   [
-//     { "key":"<variantKey 或 guidS_guidL>", "name":"...", "hex":"..." },
+//     { "key":"<variantKey 或 guidS_guidL>", "name":"..." },
+//     { "key":"...", "name":"...", "error":"写入失败原因" },
 //     ...
 //   ]
-//
-// key 规则：
-//   componentSets 变体  → variantKey（非空）或 guidS_guidL（fallback）
-//   standaloneComponents → componentKey（非空）或 guidS_guidL（fallback）
 //
 // 失败返回：{"error":"..."}
 // =============================================================================
 
 std::string instantiateCompSet(const std::string &indexPath,
                                const std::string &baseDir,
-                               const std::string &setNames) {
+                               const std::string &setNames,
+                               const std::string &tmpDir) {
     if (indexPath.empty()) return errJson("indexPath is empty");
+    if (tmpDir.empty())    return errJson("tmpDir is empty");
 
     std::set<std::string> nameFilter;
     {
@@ -364,19 +364,31 @@ std::string instantiateCompSet(const std::string &indexPath,
         return maxSess + 1;
     };
 
+    std::string td = tmpDir;
+    if (!td.empty() && td.back() != '/') td += '/';
+
     std::string jsonOut = "[";
     bool first = true;
 
     auto emit = [&](const std::string &key, const std::string &name,
                     uint32_t symS, uint32_t symL,
                     const std::string &hexFile) {
+        if (!first) jsonOut += ",";
+        first = false;
+
         CompSetData *cs = getCS(hexFile);
-        if (!cs) return;
+        if (!cs) {
+            jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                     + ",\"error\":\"load compset failed\"}";
+            return;
+        }
         ensureMaps(cs);
 
         auto smIt = symMaps[cs].find(gkStr(symS, symL));
         if (smIt == symMaps[cs].end()) {
             fprintf(stderr, "[WARN] SYMBOL {%u,%u} 未找到 (%s)\n", symS, symL, name.c_str());
+            jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                     + ",\"error\":\"symbol not found\"}";
             return;
         }
         const PixsoNode *symNode = smIt->second;
@@ -384,16 +396,23 @@ std::string instantiateCompSet(const std::string &indexPath,
         std::string hex = buildOneInstanceHex(name, symS, symL, symNode,
                                               *cs, childMaps[cs], dslSessionOf(cs));
         if (hex.empty()) {
-            fprintf(stderr, "[WARN] 构建失败: %s\n", name.c_str());
+            jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                     + ",\"error\":\"build failed\"}";
             return;
         }
 
-        if (!first) jsonOut += ",";
-        first = false;
-        jsonOut += "{\"key\":"  + jsonStr(key)
-                 + ",\"name\":" + jsonStr(name)
-                 + ",\"hex\":"  + jsonStr(hex)
-                 + "}";
+        // 写到 tmpDir/<key>.hex（key 全是 ASCII，fopen 安全）
+        std::string outPath = td + key + ".hex";
+        FILE *fp = fopen(outPath.c_str(), "w");
+        if (!fp) {
+            jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                     + ",\"error\":\"fopen failed: " + outPath + "\"}";
+            return;
+        }
+        fwrite(hex.c_str(), 1, hex.size(), fp);
+        fclose(fp);
+
+        jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name) + "}";
     };
 
     // ── componentSets 变体 ────────────────────────────────────────────────────
@@ -421,3 +440,4 @@ std::string instantiateCompSet(const std::string &indexPath,
 EMSCRIPTEN_BINDINGS(compset_instantiate_wasm) {
     emscripten::function("instantiateCompSet", &instantiateCompSet);
 }
+

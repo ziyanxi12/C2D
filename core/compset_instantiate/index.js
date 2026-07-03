@@ -154,6 +154,11 @@ console.log('outdir :', outDir);
 console.log(`共 ${allNames.length} 个组件，分 ${batches.length} 批（每批 ${batchSize}）`);
 console.log('');
 
+// WASM 写文件用的临时目录，必须是 ASCII 路径（fopen 限制）
+// __dirname 是 compset_instantiate/ 的绝对路径，始终 ASCII
+const tmpDir = path.join(__dirname, 'tmp_work');
+fs.mkdirSync(tmpDir, { recursive: true });
+
 CompsetInstantiate().then(mod => {
     const t0         = Date.now();
     let totalWritten = 0;
@@ -166,7 +171,7 @@ CompsetInstantiate().then(mod => {
         const bt = Date.now();
         let result;
         try {
-            result = mod.instantiateCompSet(indexPath, baseDir, batch.join(','));
+            result = mod.instantiateCompSet(indexPath, baseDir, batch.join(','), tmpDir);
         } catch (e) {
             console.error(`  ✗ WASM 异常: ${e.message}`);
             for (const name of batch) {
@@ -190,7 +195,7 @@ CompsetInstantiate().then(mod => {
             continue;
         }
 
-        // 解析结果数组
+        // 解析结果数组（现在只含 key/name，hex 已由 WASM 写到 tmpDir）
         let items;
         try { items = JSON.parse(result); } catch (e) {
             console.error(`  ✗ 解析失败: ${e.message}`);
@@ -201,18 +206,25 @@ CompsetInstantiate().then(mod => {
             continue;
         }
 
-        // 逐个写文件，打印每条结果
+        // 把文件从 tmpDir mv 到 outDir（JS rename 支持 UTF-8 路径）
         let batchOk = 0;
         let batchErr = 0;
         for (const item of items) {
-            const hexFile = path.join(outDir, item.key + '.hex');
+            if (item.error) {
+                console.error(`  ✗ ${item.name}  [${item.key}]  ${item.error}`);
+                failures.push({ batch: bi + 1, name: item.name, key: item.key, reason: item.error });
+                batchErr++;
+                continue;
+            }
+            const src  = path.join(tmpDir, item.key + '.hex');
+            const dest = path.join(outDir, item.key + '.hex');
             try {
-                fs.writeFileSync(hexFile, item.hex, 'utf8');
+                fs.renameSync(src, dest);
                 console.log(`  ✓ ${item.name}  →  ${item.key}.hex`);
                 batchOk++;
             } catch (e) {
-                console.error(`  ✗ ${item.name}  [${item.key}]  写入失败: ${e.message}`);
-                failures.push({ batch: bi + 1, name: item.name, key: item.key, reason: `写入失败: ${e.message}` });
+                console.error(`  ✗ ${item.name}  [${item.key}]  移动失败: ${e.message}`);
+                failures.push({ batch: bi + 1, name: item.name, key: item.key, reason: `移动失败: ${e.message}` });
                 batchErr++;
             }
         }
@@ -221,6 +233,9 @@ CompsetInstantiate().then(mod => {
         console.log(`  批次完成: ${batchOk} 成功  ${batchErr} 失败  耗时 ${wasmMs} ms`);
         console.log('');
     }
+
+    // 清理临时目录
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
 
     const totalMs = Date.now() - t0;
     console.log('=== 汇总 ===');

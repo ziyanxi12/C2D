@@ -21,7 +21,7 @@ if (!fs.existsSync(indexPath)) { console.error('找不到:', indexPath); process
 if (!fs.existsSync(outDir))    { console.error('找不到:', outDir);    process.exit(1); }
 
 const index   = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-const present = new Set(fs.readdirSync(outDir).filter(f => f.endsWith('.hex')).map(f => f.slice(0, -4)));
+const present = new Set(fs.readdirSync(outDir).filter(f => f.endsWith('.txt')).map(f => f.slice(0, -4)));
 
 // guid 格式: "8229:277395"，fallback 时冒号换下划线
 function resolveKey(hash, guid) {
@@ -55,5 +55,5 @@ if (missing.length === 0) {
 console.log(`缺失 ${missing.length} 个（output 目录: ${outDir}）\n`);
 for (const m of missing) {
     const label = m.type === 'componentSet' ? `[${m.setName}] ${m.name}` : m.name;
-    console.log(`  ✗  ${label}  →  ${m.key}.hex`);
+    console.log(`  ✗  ${label}  →  ${m.key}.txt`);
 }

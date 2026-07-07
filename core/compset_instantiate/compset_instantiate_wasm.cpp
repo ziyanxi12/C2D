@@ -120,6 +120,13 @@ static std::string resolveKey(const std::string &hash, uint32_t s, uint32_t l) {
     return std::to_string(s) + "_" + std::to_string(l);
 }
 
+static std::string fStr(float v) {
+    char buf[32];
+    if (v == floorf(v)) snprintf(buf, sizeof(buf), "%d", (int)v);
+    else                snprintf(buf, sizeof(buf), "%.4g", v);
+    return buf;
+}
+
 // =============================================================================
 // 为单个 SYMBOL 构建独立 hex 字符串
 //
@@ -275,17 +282,18 @@ static std::string buildOneInstanceHex(
 // =============================================================================
 // WASM 导出函数
 //
-// instantiateCompSet(indexPath, baseDir, setNames, tmpDir) → JSON 数组 | error JSON
+// instantiateCompSet(indexPath, baseDir, setNames, tmpDir, jsonOnly) → JSON 数组 | error JSON
 //
 //   indexPath : component_index.json 的绝对路径
 //   baseDir   : hexFile 字段的基准目录
 //   setNames  : 逗号分隔的名称过滤（空 = 全部，含 componentSets + standaloneComponents）
 //   tmpDir    : 临时输出目录（必须是 ASCII 路径，WASM 直接写文件到此处）
+//   jsonOnly  : true = 只收集元数据，不写 hex 文件
 //
-// 成功返回 JSON 数组，每个元素仅含元数据（hex 内容已写入 tmpDir/<key>.hex）：
+// 成功返回 JSON 数组，每个元素含元数据（hex 已写入 tmpDir/<key>.hex，除非 jsonOnly）：
 //   [
-//     { "key":"<variantKey 或 guidS_guidL>", "name":"..." },
-//     { "key":"...", "name":"...", "error":"写入失败原因" },
+//     { "key":"...", "name":"...", "width":120, "height":40 },
+//     { "key":"...", "name":"...", "width":0,   "height":0, "error":"失败原因" },
 //     ...
 //   ]
 //
@@ -295,9 +303,10 @@ static std::string buildOneInstanceHex(
 std::string instantiateCompSet(const std::string &indexPath,
                                const std::string &baseDir,
                                const std::string &setNames,
-                               const std::string &tmpDir) {
-    if (indexPath.empty()) return errJson("indexPath is empty");
-    if (tmpDir.empty())    return errJson("tmpDir is empty");
+                               const std::string &tmpDir,
+                               bool              jsonOnly) {
+    if (indexPath.empty())           return errJson("indexPath is empty");
+    if (!jsonOnly && tmpDir.empty()) return errJson("tmpDir is empty");
 
     std::set<std::string> nameFilter;
     {
@@ -379,7 +388,7 @@ std::string instantiateCompSet(const std::string &indexPath,
         CompSetData *cs = getCS(hexFile);
         if (!cs) {
             jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
-                     + ",\"error\":\"load compset failed\"}";
+                     + ",\"width\":0,\"height\":0,\"error\":\"load compset failed\"}";
             return;
         }
         ensureMaps(cs);
@@ -388,31 +397,41 @@ std::string instantiateCompSet(const std::string &indexPath,
         if (smIt == symMaps[cs].end()) {
             fprintf(stderr, "[WARN] SYMBOL {%u,%u} 未找到 (%s)\n", symS, symL, name.c_str());
             jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
-                     + ",\"error\":\"symbol not found\"}";
+                     + ",\"width\":0,\"height\":0,\"error\":\"symbol not found\"}";
             return;
         }
         const PixsoNode *symNode = smIt->second;
 
-        std::string hex = buildOneInstanceHex(name, symS, symL, symNode,
-                                              *cs, childMaps[cs], dslSessionOf(cs));
-        if (hex.empty()) {
-            jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
-                     + ",\"error\":\"build failed\"}";
-            return;
+        // 从 symNode 读取宽高
+        float w = 0.f, h = 0.f;
+        if (symNode->size()) {
+            if (symNode->size()->x() && *symNode->size()->x() > 0) w = *symNode->size()->x();
+            if (symNode->size()->y() && *symNode->size()->y() > 0) h = *symNode->size()->y();
         }
 
-        // 写到 tmpDir/<key>.hex（key 全是 ASCII，fopen 安全）
-        std::string outPath = td + key + ".hex";
-        FILE *fp = fopen(outPath.c_str(), "w");
-        if (!fp) {
-            jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
-                     + ",\"error\":\"fopen failed: " + outPath + "\"}";
-            return;
+        if (!jsonOnly) {
+            std::string hex = buildOneInstanceHex(name, symS, symL, symNode,
+                                                  *cs, childMaps[cs], dslSessionOf(cs));
+            if (hex.empty()) {
+                jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                         + ",\"width\":" + fStr(w) + ",\"height\":" + fStr(h)
+                         + ",\"error\":\"build failed\"}";
+                return;
+            }
+            std::string outPath = td + key + ".txt";
+            FILE *fp = fopen(outPath.c_str(), "w");
+            if (!fp) {
+                jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                         + ",\"width\":" + fStr(w) + ",\"height\":" + fStr(h)
+                         + ",\"error\":\"fopen failed: " + outPath + "\"}";
+                return;
+            }
+            fwrite(hex.c_str(), 1, hex.size(), fp);
+            fclose(fp);
         }
-        fwrite(hex.c_str(), 1, hex.size(), fp);
-        fclose(fp);
 
-        jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name) + "}";
+        jsonOut += "{\"key\":" + jsonStr(key) + ",\"name\":" + jsonStr(name)
+                 + ",\"width\":" + fStr(w) + ",\"height\":" + fStr(h) + "}";
     };
 
     // ── componentSets 变体 ────────────────────────────────────────────────────
@@ -440,4 +459,5 @@ std::string instantiateCompSet(const std::string &indexPath,
 EMSCRIPTEN_BINDINGS(compset_instantiate_wasm) {
     emscripten::function("instantiateCompSet", &instantiateCompSet);
 }
+
 

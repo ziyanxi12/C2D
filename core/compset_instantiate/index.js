@@ -8,24 +8,25 @@ const CompsetInstantiate = require('./bin/compset_instantiate.js');
 // 用法
 // =============================================================================
 //
-// node index.js <component_index.json> <base_dir> [名称过滤...] [--outdir <dir>] [--batch <n>]
+// node index.js <component_index.json> <base_dir> [名称过滤...] [--outdir <dir>] [--batch <n>] [--json-only]
 //
 // component_index.json : 组件集索引文件（split_compset 输出）
 // base_dir             : hexFile 路径的基准目录
 // [名称过滤...]        : 可选，按 name 字段过滤（支持 componentSets 和 standaloneComponents）
 // --outdir <dir>       : 可选，输出根目录；默认 output/
 // --batch  <n>         : 可选，每批处理的组件数量；默认 20
+// --json-only          : 可选，只输出 variants.json（不生成 hex 文件）
 //
-// 输出：每个变体 / 独立组件生成一个 hex 文件，打平放在 outdir 下：
-//   <outdir>/<variantKey>.hex          (componentSets 变体，有 key 时)
-//   <outdir>/<componentKey>.hex        (standaloneComponents，有 key 时)
-//   <outdir>/<guidS>_<guidL>.hex       (key 为空时的 fallback)
+// 输出：
+//   <outdir>/<variantKey>.txt          (每个变体的实例 hex，除非 --json-only)
+//   <outdir>/variants.json             (所有变体的 key/name/width/height 汇总，始终输出)
 //
 // 示例：
 //   node index.js component_index.json base_dir "文字链接"
 //   node index.js component_index.json base_dir "文字链接" "2.拖拽把手"
 //   node index.js component_index.json base_dir --outdir /tmp/instances
 //   node index.js component_index.json base_dir --batch 10
+//   node index.js component_index.json base_dir --json-only
 // =============================================================================
 
 const rawArgs = process.argv.slice(2);
@@ -46,6 +47,7 @@ if (rawArgs.length < 2) {
 let outDir    = '';
 let batchSize = 20;
 let retryMode = false;
+let jsonOnly  = false;
 const positional = [];
 
 for (let i = 0; i < rawArgs.length; i++) {
@@ -55,6 +57,8 @@ for (let i = 0; i < rawArgs.length; i++) {
         batchSize = parseInt(rawArgs[++i], 10) || 20;
     } else if (rawArgs[i] === '--retry') {
         retryMode = true;
+    } else if (rawArgs[i] === '--json-only') {
+        jsonOnly = true;
     } else {
         positional.push(rawArgs[i]);
     }
@@ -103,7 +107,7 @@ function resolveNames(indexPath, nameFilter) {
 function resolveRetryNames(indexPath, outDir) {
     const index   = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
     const present = new Set(
-        fs.readdirSync(outDir).filter(f => f.endsWith('.hex')).map(f => f.slice(0, -4))
+        fs.readdirSync(outDir).filter(f => f.endsWith('.txt')).map(f => f.slice(0, -4))
     );
     const names = new Set();
     for (const cs of (index.componentSets || [])) {
@@ -150,6 +154,7 @@ if (retryMode) {
 } else {
     console.log('filter :', nameFilter.length === 0 ? '(全部)' : nameFilter.join(', '));
 }
+if (jsonOnly) console.log('模式   : --json-only（只输出 variants.json，不写 hex）');
 console.log('outdir :', outDir);
 console.log(`共 ${allNames.length} 个组件，分 ${batches.length} 批（每批 ${batchSize}）`);
 console.log('');
@@ -163,6 +168,7 @@ CompsetInstantiate().then(mod => {
     const t0         = Date.now();
     let totalWritten = 0;
     const failures   = [];   // { batch, name, key, reason }
+    const allItems   = [];   // { key, name, width, height } — 用于输出 variants.json
 
     for (let bi = 0; bi < batches.length; bi++) {
         const batch = batches[bi];
@@ -171,7 +177,7 @@ CompsetInstantiate().then(mod => {
         const bt = Date.now();
         let result;
         try {
-            result = mod.instantiateCompSet(indexPath, baseDir, batch.join(','), tmpDir);
+            result = mod.instantiateCompSet(indexPath, baseDir, batch.join(','), tmpDir, jsonOnly);
         } catch (e) {
             console.error(`  ✗ WASM 异常: ${e.message}`);
             for (const name of batch) {
@@ -206,7 +212,7 @@ CompsetInstantiate().then(mod => {
             continue;
         }
 
-        // 把文件从 tmpDir mv 到 outDir（JS rename 支持 UTF-8 路径）
+        // 处理每条结果
         let batchOk = 0;
         let batchErr = 0;
         for (const item of items) {
@@ -216,16 +222,26 @@ CompsetInstantiate().then(mod => {
                 batchErr++;
                 continue;
             }
-            const src  = path.join(tmpDir, item.key + '.hex');
-            const dest = path.join(outDir, item.key + '.hex');
-            try {
-                fs.renameSync(src, dest);
-                console.log(`  ✓ ${item.name}  →  ${item.key}.hex`);
+
+            // 收集到 allItems（始终，不论是否 json-only）
+            allItems.push({ key: item.key, name: item.name, width: item.width, height: item.height });
+
+            if (jsonOnly) {
+                console.log(`  ✓ ${item.name}  ${item.width}×${item.height}`);
                 batchOk++;
-            } catch (e) {
-                console.error(`  ✗ ${item.name}  [${item.key}]  移动失败: ${e.message}`);
-                failures.push({ batch: bi + 1, name: item.name, key: item.key, reason: `移动失败: ${e.message}` });
-                batchErr++;
+            } else {
+                // 把文件从 tmpDir mv 到 outDir（JS rename 支持 UTF-8 路径）
+                const src  = path.join(tmpDir, item.key + '.txt');
+                const dest = path.join(outDir, item.key + '.txt');
+                try {
+                    fs.renameSync(src, dest);
+                    console.log(`  ✓ ${item.name}  ${item.width}×${item.height}  →  ${item.key}.txt`);
+                    batchOk++;
+                } catch (e) {
+                    console.error(`  ✗ ${item.name}  [${item.key}]  移动失败: ${e.message}`);
+                    failures.push({ batch: bi + 1, name: item.name, key: item.key, reason: `移动失败: ${e.message}` });
+                    batchErr++;
+                }
             }
         }
 
@@ -237,10 +253,15 @@ CompsetInstantiate().then(mod => {
     // 清理临时目录
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
 
+    // 写 variants.json
+    const jsonOutPath = path.join(outDir, 'variants.json');
+    fs.writeFileSync(jsonOutPath, JSON.stringify(allItems, null, 2), 'utf8');
+
     const totalMs = Date.now() - t0;
     console.log('=== 汇总 ===');
     console.log(`成功: ${totalWritten}  失败: ${failures.length}  总耗时: ${totalMs} ms`);
-    console.log(`输出: ${outDir}`);
+    if (!jsonOnly) console.log(`输出: ${outDir}`);
+    console.log(`JSON: ${jsonOutPath}`);
 
     if (failures.length > 0) {
         const logPath = path.join(outDir, 'failed.log');

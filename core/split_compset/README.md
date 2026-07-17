@@ -15,7 +15,7 @@ split_compset/
 ├── Makefile.wasm           # WASM 编译（需要 emsdk）
 ├── index.js                # WASM 调用示例（入口）
 ├── lib/                    # 组件库文件
-│   └── ICT UI_v3.1.1_PC端组件库（新）.pix
+│   └── ICT UI_v3.1.1_PC端组件库（新）.pix afjOn7hyzf2VU3qG1CpN7Q
 ├── bin/                    # 编译产物
 │   └── split_compset       # CLI 可执行文件
 └── harmony_out/            # 拆解输出目录

@@ -16,19 +16,21 @@
 // WASM 导出函数
 // =============================================================================
 
-// splitCompset(pixPath, outDir, publishFile, domain) → JSON 字符串
+// splitCompset(pixPath, outDir, publishFile, domain, writeHex) → JSON 字符串
 // - pixPath:     组件库 .pix 文件路径
 // - outDir:      输出目录（生成 <outDir>/component/*.txt + component_index.json）
 // - publishFile: 可选，缺少 componentKey 时用于补写发布信息（同 CLI --publish-file）
 // - domain:      可选，组件库领域标识，写入 component_index.json 顶层字段
+// - writeHex:    是否写 hex 文件（false 时只输出 component_index.json）
 //
-// 等价于 CLI: split_compset build_index <pixPath> <outDir> [--publish-file <publishFile>] [--domain <domain>]
+// 等价于 CLI: split_compset build_index <pixPath> <outDir> [--publish-file <publishFile>] [--domain <domain>] [--no-hex]
 // 返回: {"total":N,"componentSets":A,"standaloneComponents":B,"compDir":"...","indexFile":"..."}
 //   或: {"error":"..."}
 std::string splitCompset(const std::string &pixPath,
-                          const std::string &outDir,
-                          const std::string &publishFile,
-                          const std::string &domain = "") {
+                         const std::string &outDir,
+                         const std::string &publishFile,
+                         const std::string &domain,
+                         bool writeHex) {
     auto raw = readFile(pixPath.c_str());
     if (raw.empty())
         return "{\"error\":\"cannot open: " + pixPath + "\"}";
@@ -46,7 +48,7 @@ std::string splitCompset(const std::string &pixPath,
     if (sets.empty())
         return "{\"error\":\"no component sets found\"}";
 
-    auto stats = dumpCompSets(sets, outDir, /*writeIndex=*/true, domain);
+    auto stats = dumpCompSets(sets, outDir, /*writeIndex=*/true, writeHex, domain);
 
     std::string json = "{";
     json += "\"total\":" + std::to_string(stats.written) + ",";

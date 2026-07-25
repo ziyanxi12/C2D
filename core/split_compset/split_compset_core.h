@@ -336,6 +336,7 @@ struct CompSet {
     GK          rootGuid;
     std::string rootName;
     std::string canvasName;   // 所在页面
+    std::string parentName;   // 直接父节点名称（CANVAS 或 SECTION）
     uint32_t    rootType;
     std::string componentKey; // 根节点的 componentKey（用于文件命名）
     bool        isStateGroup = false; // 是否为组件集（FRAME + isStateGroup）
@@ -649,6 +650,10 @@ static std::vector<CompSet> splitLibrary(const LibIndex &li) {
         cs.rootGuid     = child.guid;
         cs.rootName     = child.name;
         cs.canvasName   = canvasName;
+        {
+            auto parentIt = li.byGuid.find(child.parent);
+            cs.parentName = (parentIt != li.byGuid.end()) ? parentIt->second.name : "";
+        }
         cs.rootType     = child.typeVal;
         cs.componentKey = child.componentKey;
         cs.isStateGroup = isCompSet;
@@ -842,42 +847,61 @@ static std::string compSetFileName(const CompSet &cs) {
          ? std::to_string(cs.rootGuid.s) + "_" + std::to_string(cs.rootGuid.l)
          : cs.componentKey;
 }
-
 static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
                               const std::string &outdir,
                               bool writeIndex,
+                              bool writeHex,
                               const std::string &domain = "") {
     DumpStats stats;
     stats.compDir = outdir + "/component";
-    mkdir(outdir.c_str(),        0755);
-    mkdir(stats.compDir.c_str(), 0755);
+    mkdir(outdir.c_str(), 0755);
+    if (writeHex) mkdir(stats.compDir.c_str(), 0755);
 
     for (size_t i = 0; i < sets.size(); i++) {
         const CompSet &cs = sets[i];
         if (cs.pixData.empty()) continue;
 
-        std::string fname = compSetFileName(cs);
-        std::string hex   = "<!-- pixso binary data -->\n" + bytesToHex(cs.pixData);
-        std::string path  = stats.compDir + "/" + fname + ".txt";
-        std::vector<uint8_t> hexBytes(hex.begin(), hex.end());
-        if (writeFile(path.c_str(), hexBytes)) {
-            stats.written++;
-            printf("[%zu] %s  (%d nodes, %zu hex chars)  -> %s\n",
-                   i, cs.rootName.c_str(), cs.totalNodes, hex.size(), path.c_str());
+        if (writeHex) {
+            std::string fname = compSetFileName(cs);
+            std::string hex   = "<!-- pixso binary data -->\n" + bytesToHex(cs.pixData);
+            std::string path  = stats.compDir + "/" + fname + ".txt";
+            std::vector<uint8_t> hexBytes(hex.begin(), hex.end());
+            if (writeFile(path.c_str(), hexBytes)) {
+                stats.written++;
+                printf("[%zu] %s  (%d nodes, %zu hex chars)  -> %s\n",
+                       i, cs.rootName.c_str(), cs.totalNodes, hex.size(), path.c_str());
+            }
         }
         if (cs.isStateGroup) stats.componentSets++;
         else                 stats.standaloneComponents++;
     }
 
     if (writeIndex) {
-        std::string idxPath = stats.compDir + "/component_index.json";
+        std::string idxPath = writeHex ? (stats.compDir + "/component_index.json")
+                                       : (outdir + "/component_index.json");
         FILE *jf = fopen(idxPath.c_str(), "w");
         if (!jf) { fprintf(stderr, "cannot write: %s\n", idxPath.c_str()); return stats; }
+
+        // JSON 字符串转义
+        auto esc = [](const std::string &s) {
+            std::string r; r.reserve(s.size() + 2);
+            for (char c : s) {
+                switch (c) {
+                    case '"':  r += "\\\""; break;
+                    case '\\': r += "\\\\"; break;
+                    case '\n': r += "\\n";  break;
+                    case '\r': r += "\\r";  break;
+                    case '\t': r += "\\t";  break;
+                    default:   r += c;      break;
+                }
+            }
+            return r;
+        };
 
         fprintf(jf, "{\n");
 
         if (!domain.empty())
-            fprintf(jf, "  \"domain\": \"%s\",\n", domain.c_str());
+            fprintf(jf, "  \"domain\": \"%s\",\n", esc(domain).c_str());
 
         // 组件集列表（isStateGroup==true）
         fprintf(jf, "  \"componentSets\": [\n");
@@ -886,33 +910,40 @@ static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
             if (!cs.isStateGroup) continue;
             if (!firstCs) fprintf(jf, ",\n");
             firstCs = false;
-            std::string hexFile = "component/" + compSetFileName(cs) + ".txt";
+            std::string hexFile = writeHex ? ("component/" + compSetFileName(cs) + ".txt") : "";
             fprintf(jf, "    {\n");
-            fprintf(jf, "      \"name\": \"%s\",\n", cs.rootName.c_str());
+            fprintf(jf, "      \"name\": \"%s\",\n", esc(cs.rootName).c_str());
             fprintf(jf, "      \"guid\": \"%u:%u\",\n", cs.rootGuid.s, cs.rootGuid.l);
-            fprintf(jf, "      \"componentKey\": \"%s\",\n", cs.componentKey.c_str());
-            fprintf(jf, "      \"canvasName\": \"%s\",\n", cs.canvasName.c_str());
-            fprintf(jf, "      \"hexFile\": \"%s\",\n", hexFile.c_str());
+            fprintf(jf, "      \"componentKey\": \"%s\",\n", esc(cs.componentKey).c_str());
+            fprintf(jf, "      \"canvasName\": \"%s\",\n", esc(cs.canvasName).c_str());
+            fprintf(jf, "      \"parentName\": \"%s\",\n", esc(cs.parentName).c_str());
+            fprintf(jf, "      \"hexFile\": \"%s\",\n", esc(hexFile).c_str());
             fprintf(jf, "      \"variants\": [\n");
             for (size_t vi = 0; vi < cs.variants.size(); vi++) {
                 const VariantInfo &v = cs.variants[vi];
                 if (vi > 0) fprintf(jf, ",\n");
                 fprintf(jf, "        {\n");
-                fprintf(jf, "          \"name\": \"%s\",\n", v.name.c_str());
-                fprintf(jf, "          \"guid\": \"%s\",\n", v.guid.c_str());
-                fprintf(jf, "          \"variantKey\": \"%s\",\n", v.componentKey.c_str());
+                fprintf(jf, "          \"name\": \"%s\",\n", esc(v.name).c_str());
+                fprintf(jf, "          \"guid\": \"%s\",\n", esc(v.guid).c_str());
+                fprintf(jf, "          \"variantKey\": \"%s\",\n", esc(v.componentKey).c_str());
+                fprintf(jf, "          \"parentKey\": \"%s\",\n", esc(v.parentKey).c_str());
+                fprintf(jf, "          \"componentSetGuid\": \"%u:%u\",\n", cs.rootGuid.s, cs.rootGuid.l);
+                fprintf(jf, "          \"componentSetKey\": \"%s\",\n", esc(cs.componentKey).c_str());
+                fprintf(jf, "          \"componentSetName\": \"%s\",\n", esc(cs.rootName).c_str());
+                fprintf(jf, "          \"parentName\": \"%s\",\n", esc(cs.parentName).c_str());
+                fprintf(jf, "          \"canvasName\": \"%s\",\n", esc(cs.canvasName).c_str());
+                fprintf(jf, "          \"hexFile\": \"%s\"", esc(hexFile).c_str());
                 if (!v.componentProps.empty()) {
-                    fprintf(jf, "          \"parentKey\": \"%s\",\n", v.parentKey.c_str());
-                    fprintf(jf, "          \"componentProps\": [\n");
+                    fprintf(jf, ",\n          \"componentProps\": [\n");
                     for (size_t pi = 0; pi < v.componentProps.size(); pi++) {
                         if (pi > 0) fprintf(jf, ",\n");
                         fprintf(jf, "            { \"name\": \"%s\", \"type\": \"%s\" }",
-                                v.componentProps[pi].name.c_str(),
-                                v.componentProps[pi].type.c_str());
+                                esc(v.componentProps[pi].name).c_str(),
+                                esc(v.componentProps[pi].type).c_str());
                     }
                     fprintf(jf, "\n          ]\n");
                 } else {
-                    fprintf(jf, "          \"parentKey\": \"%s\"\n", v.parentKey.c_str());
+                    fprintf(jf, "\n");
                 }
                 fprintf(jf, "        }");
             }
@@ -930,25 +961,27 @@ static DumpStats dumpCompSets(const std::vector<CompSet> &sets,
             if (cs.isStateGroup) continue;
             if (!firstSc) fprintf(jf, ",\n");
             firstSc = false;
-            std::string hexFile = "component/" + compSetFileName(cs) + ".txt";
+            std::string hexFile = writeHex ? ("component/" + compSetFileName(cs) + ".txt") : "";
             fprintf(jf, "    {\n");
-            fprintf(jf, "      \"name\": \"%s\",\n", cs.rootName.c_str());
+            fprintf(jf, "      \"name\": \"%s\",\n", esc(cs.rootName).c_str());
             fprintf(jf, "      \"guid\": \"%u:%u\",\n", cs.rootGuid.s, cs.rootGuid.l);
-            fprintf(jf, "      \"componentKey\": \"%s\",\n", cs.componentKey.c_str());
-            fprintf(jf, "      \"canvasName\": \"%s\",\n", cs.canvasName.c_str());
+            fprintf(jf, "      \"componentKey\": \"%s\",\n", esc(cs.componentKey).c_str());
+            fprintf(jf, "      \"canvasName\": \"%s\",\n", esc(cs.canvasName).c_str());
+            fprintf(jf, "      \"parentName\": \"%s\",\n", esc(cs.parentName).c_str());
+            fprintf(jf, "      \"hexFile\": \"%s\"", esc(hexFile).c_str());
             {
                 const auto &props = cs.variants.empty() ? std::vector<CompPropEntry>{} : cs.variants[0].componentProps;
                 if (!props.empty()) {
-                    fprintf(jf, "      \"hexFile\": \"%s\",\n", hexFile.c_str());
-                    fprintf(jf, "      \"componentProps\": [\n");
+                    fprintf(jf, ",\n      \"componentProps\": [\n");
                     for (size_t pi = 0; pi < props.size(); pi++) {
                         if (pi > 0) fprintf(jf, ",\n");
                         fprintf(jf, "        { \"name\": \"%s\", \"type\": \"%s\" }",
-                                props[pi].name.c_str(), props[pi].type.c_str());
+                                esc(props[pi].name).c_str(),
+                                esc(props[pi].type).c_str());
                     }
                     fprintf(jf, "\n      ]\n");
                 } else {
-                    fprintf(jf, "      \"hexFile\": \"%s\"\n", hexFile.c_str());
+                    fprintf(jf, "\n");
                 }
             }
             fprintf(jf, "    }");

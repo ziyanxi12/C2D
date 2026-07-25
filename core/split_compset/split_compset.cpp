@@ -41,7 +41,8 @@ static void printUsage(const char *prog) {
         "  %s hexall      <complib.pix> <out.txt>[--publish-file <id>]  所有组件集 hex 写入文件\n\n"
         "  --publish-file <id>  为缺少 componentKey 的组件补写发布信息\n"
         "                       componentKey = SHA1(publishFile + sessionID:localID)\n"
-        "  --domain <name>      组件库领域标识，写入 component_index.json 顶层字段\n\n"
+        "  --domain <name>      组件库领域标识，写入 component_index.json 顶层字段\n"
+        "  --no-hex             不写 hex 文件，只输出 component_index.json\n\n"
         "示例:\n"
         "  %s report      '../HarmonyOS Component Library（来自社区）.pix'\n"
         "  %s build_index '../HarmonyOS Component Library（来自社区）.pix' ./out --publish-file QcO-1WDViGmGQ4IFU_p4FQ\n",
@@ -51,15 +52,18 @@ static void printUsage(const char *prog) {
 int main(int argc, char **argv) {
     if (argc < 3) { printUsage(argv[0]); return 1; }
 
-    // 解析 --publish-file / --domain（可放在任意位置）
+    // 解析 --publish-file / --domain / --no-hex（可放在任意位置）
     std::string publishFile;
     std::string domain;
+    bool noHex = false;
     std::vector<char *> args;
     for (int i = 0; i < argc; i++) {
         if (std::string(argv[i]) == "--publish-file" && i + 1 < argc) {
             publishFile = argv[++i];
         } else if (std::string(argv[i]) == "--domain" && i + 1 < argc) {
             domain = argv[++i];
+        } else if (std::string(argv[i]) == "--no-hex") {
+            noHex = true;
         } else {
             args.push_back(argv[i]);
         }
@@ -93,7 +97,7 @@ int main(int argc, char **argv) {
     } else if (cmd == "dump" || cmd == "build_index") {
         if (argc < 4) { fprintf(stderr, "需要输出目录\n"); return 1; }
         std::string outdir = argv[3];
-        dumpCompSets(sets, outdir, cmd == "build_index", domain);
+        dumpCompSets(sets, outdir, cmd == "build_index", !noHex, domain);
 
     } else if (cmd == "hex") {
         if (argc < 4) { fprintf(stderr, "需要 index\n"); return 1; }

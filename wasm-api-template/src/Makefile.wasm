@@ -1,0 +1,76 @@
+# ═══════════════════════════════════════════════════════════════
+# 用户配置区 — split_compset
+# ═══════════════════════════════════════════════════════════════
+
+TARGET      = split_compset
+EXPORT_NAME = SplitCompset
+SOURCES     = split_compset_wasm.cpp
+
+INCLUDES    = -I. -Ilib -Ilib/kiwi-master -Ilib/zstd-1.5.6/lib
+
+# zstd 全部源码
+EXTRA_SRCS = \
+	lib/zstd-1.5.6/lib/common/debug.c \
+	lib/zstd-1.5.6/lib/common/entropy_common.c \
+	lib/zstd-1.5.6/lib/common/error_private.c \
+	lib/zstd-1.5.6/lib/common/fse_decompress.c \
+	lib/zstd-1.5.6/lib/common/pool.c \
+	lib/zstd-1.5.6/lib/common/threading.c \
+	lib/zstd-1.5.6/lib/common/xxhash.c \
+	lib/zstd-1.5.6/lib/common/zstd_common.c \
+	lib/zstd-1.5.6/lib/decompress/huf_decompress.c \
+	lib/zstd-1.5.6/lib/decompress/zstd_ddict.c \
+	lib/zstd-1.5.6/lib/decompress/zstd_decompress.c \
+	lib/zstd-1.5.6/lib/decompress/zstd_decompress_block.c \
+	lib/zstd-1.5.6/lib/compress/fse_compress.c \
+	lib/zstd-1.5.6/lib/compress/hist.c \
+	lib/zstd-1.5.6/lib/compress/huf_compress.c \
+	lib/zstd-1.5.6/lib/compress/zstd_compress.c \
+	lib/zstd-1.5.6/lib/compress/zstd_compress_literals.c \
+	lib/zstd-1.5.6/lib/compress/zstd_compress_sequences.c \
+	lib/zstd-1.5.6/lib/compress/zstd_compress_superblock.c \
+	lib/zstd-1.5.6/lib/compress/zstd_double_fast.c \
+	lib/zstd-1.5.6/lib/compress/zstd_fast.c \
+	lib/zstd-1.5.6/lib/compress/zstd_lazy.c \
+	lib/zstd-1.5.6/lib/compress/zstd_ldm.c \
+	lib/zstd-1.5.6/lib/compress/zstd_opt.c
+
+# ═══════════════════════════════════════════════════════════════
+# 以下通常不需要修改
+# ═══════════════════════════════════════════════════════════════
+
+EMCC     ?= emcc
+CXXFLAGS = -std=c++17 -O2 $(INCLUDES)
+CFLAGS   = -O2 -Ilib/zstd-1.5.6/lib -DZSTD_DISABLE_ASM
+
+BIN_JS   = bin/$(TARGET).js
+BIN_WASM = bin/$(TARGET).wasm
+
+all: bin $(BIN_JS)
+
+bin:
+	mkdir -p bin
+
+EXTRA_OBJS = $(EXTRA_SRCS:.c=.wasm.o)
+
+%.wasm.o: %.c
+	$(EMCC) $(CFLAGS) -c -o $@ $<
+
+$(BIN_JS): $(SOURCES) $(EXTRA_OBJS)
+	$(EMCC) $(CXXFLAGS) \
+		--bind \
+		-s WASM=1 \
+		-s MODULARIZE=1 \
+		-s EXPORT_NAME="$(EXPORT_NAME)" \
+		-s ALLOW_MEMORY_GROWTH=1 \
+		-s INITIAL_MEMORY=67108864 \
+		-s NODERAWFS=1 \
+		-s ENVIRONMENT='node' \
+		-o $(BIN_JS) \
+		$(SOURCES) $(EXTRA_OBJS)
+	@echo "  done: $(BIN_JS) + $(BIN_WASM)"
+
+clean:
+	rm -f $(BIN_JS) $(BIN_WASM) $(EXTRA_OBJS)
+
+.PHONY: all clean

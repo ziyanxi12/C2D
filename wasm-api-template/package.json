@@ -1,0 +1,6 @@
+{
+  "name": "wasm-api-template",
+  "version": "1.0.0",
+  "description": "通用 C++ → WASM → Python API 模板项目",
+  "private": true
+}

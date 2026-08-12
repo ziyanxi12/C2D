@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════════════════════
+# WASM 模块配置 — split_compset
+# ═══════════════════════════════════════════════════════════════
+
+module:
+  name: "split_compset"
+  wasm_path: "bin/split_compset.js"
+  export_name: "SplitCompset"
+  entry_function: "splitCompset"
+
+# ═══════════════════════════════════════════════════════════════
+# API 配置
+# ═══════════════════════════════════════════════════════════════
+
+api:
+  port: 5000
+  max_content_length_mb: 500
+  timeout_sec: 600
+
+# ═══════════════════════════════════════════════════════════════
+# 执行参数定义
+# splitCompset(pixPath, outDir, publishFile, domain)
+# ═══════════════════════════════════════════════════════════════
+
+params:
+  - name: "pix_file"
+    type: "file"
+    required: true
+
+  - name: "output_dir"
+    type: "output_dir"
+    required: true
+
+  - name: "publish_file"
+    type: "string"
+    required: false
+    default: ""
+
+  - name: "domain"
+    type: "string"
+    required: false
+    default: ""

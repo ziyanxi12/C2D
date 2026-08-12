@@ -1,0 +1,7 @@
+node_modules
+.git
+*.md
+src/bin
+api/__pycache__
+api/*.pyc
+.env
